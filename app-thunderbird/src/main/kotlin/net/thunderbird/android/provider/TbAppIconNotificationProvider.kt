@@ -4,5 +4,5 @@ import app.k9mail.core.android.common.provider.NotificationIconResourceProvider
 
 class TbAppIconNotificationProvider : NotificationIconResourceProvider {
     override val pushNotificationIcon: Int
-        get() = app.k9mail.core.ui.legacy.theme2.thunderbird.R.drawable.ic_logo_thunderbird_white
+        get() = net.thunderbird.android.R.drawable.ic_logo_linusmail_white
 }
