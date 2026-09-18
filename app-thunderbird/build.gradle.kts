@@ -13,13 +13,13 @@ android {
     namespace = "net.thunderbird.android"
 
     defaultConfig {
-        applicationId = "net.thunderbird.android"
+        applicationId = "ch.linusfrederix.mail"
         testApplicationId = "net.thunderbird.android.tests"
 
         versionCode = 4
         versionName = "25.0"
 
-        buildConfigField("String", "CLIENT_INFO_APP_NAME", "\"Thunderbird for Android\"")
+        buildConfigField("String", "CLIENT_INFO_APP_NAME", "\"Linus Mail\"")
     }
 
     androidResources {
