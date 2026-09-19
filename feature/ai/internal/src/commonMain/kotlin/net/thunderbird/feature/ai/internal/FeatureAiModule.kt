@@ -5,15 +5,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import net.thunderbird.core.configstore.ConfigId
 import net.thunderbird.core.configstore.backend.ConfigBackendProvider
-import net.thunderbird.feature.ai.api.AiCredentialStore
 import net.thunderbird.feature.ai.api.AiProviderRegistry
 import net.thunderbird.feature.ai.api.AiRequestExecutor
 import net.thunderbird.feature.ai.api.AiRequestPolicy
 import net.thunderbird.feature.ai.api.AiSettingsRepository
+import org.koin.core.module.Module
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
+internal expect val platformFeatureAiCredentialStoreModule: Module
+
 val featureAiModule = module {
+    includes(platformFeatureAiCredentialStoreModule)
     single<AiProviderRegistry> { UnconfiguredAiProviderRegistry() }
     single<CoroutineScope>(named("AiConfigStoreScope")) {
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -37,5 +40,4 @@ val featureAiModule = module {
             providerRegistry = get(),
         )
     }
-    single<AiCredentialStore> { UnavailableAiCredentialStore() }
 }

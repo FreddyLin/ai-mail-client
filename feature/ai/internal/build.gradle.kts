@@ -18,6 +18,15 @@ kotlin {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
         }
+        androidHostTest.dependencies {
+            implementation(libs.androidx.test.core)
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.robolectric)
+        }
+        androidMain.dependencies {
+            implementation(libs.koin.android)
+        }
     }
 }
 
