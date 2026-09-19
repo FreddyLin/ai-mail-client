@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import net.thunderbird.feature.mail.message.list.internal.ui.component.page.MessageListPage
 import net.thunderbird.feature.mail.message.list.ui.MessageListContract
+import net.thunderbird.feature.mail.message.list.ui.MessageListPresentation
 import net.thunderbird.feature.mail.message.list.ui.component.MessageListScope
 import net.thunderbird.feature.mail.message.list.ui.event.MessageListEvent
 import net.thunderbird.feature.mail.message.list.ui.state.MessageListState
@@ -16,12 +17,14 @@ internal class MessageListScreenRenderer : MessageListContract.MessageListScreen
         dispatchEvent: (MessageListEvent) -> Unit,
         modifier: Modifier,
         inAppNotificationEventFilter: (InAppNotification) -> Boolean,
+        presentation: MessageListPresentation,
     ) {
         MessageListPage(
             inAppNotificationEventFilter = inAppNotificationEventFilter,
             state = state,
             dispatchEvent = dispatchEvent,
             modifier = modifier,
+            presentation = presentation,
         )
     }
 }

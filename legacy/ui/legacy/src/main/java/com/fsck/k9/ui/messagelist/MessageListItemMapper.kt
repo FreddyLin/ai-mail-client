@@ -47,7 +47,7 @@ class MessageListItemMapper(
             message.internalDate,
             displayName,
             displayAddress,
-            displayMessageDateTime = "undefined",
+            displayMessageDateTime = "",
             previewText,
             isMessageEncrypted,
             message.isRead,

@@ -26,6 +26,7 @@ import net.thunderbird.components.ui.bolt.theme.BoltTheme
 import net.thunderbird.feature.mail.message.list.internal.ui.component.MessageListItem
 import net.thunderbird.feature.mail.message.list.internal.ui.component.organism.MessageListFooter
 import net.thunderbird.feature.mail.message.list.internal.ui.component.organism.MessageListSwipeableItem
+import net.thunderbird.feature.mail.message.list.ui.MessageListPresentation
 import net.thunderbird.feature.mail.message.list.ui.component.MessageListScope
 import net.thunderbird.feature.mail.message.list.ui.component.ScrollEvent
 import net.thunderbird.feature.mail.message.list.ui.event.MessageItemEvent
@@ -41,6 +42,7 @@ internal fun MessageListScope.MessageList(
     state: MessageListState,
     dispatchEvent: (MessageListEvent) -> Unit,
     modifier: Modifier = Modifier,
+    presentation: MessageListPresentation = MessageListPresentation.Default,
 ) {
     val listState = rememberMessageListLazyState(state, dispatchEvent)
 
@@ -65,6 +67,7 @@ internal fun MessageListScope.MessageList(
                     message = message,
                     showAccountIndicator = showAccountIndicator,
                     preferences = preferences,
+                    presentation = presentation,
                     modifier = Modifier
                         .fillMaxWidth()
                         .semantics(mergeDescendants = true) {

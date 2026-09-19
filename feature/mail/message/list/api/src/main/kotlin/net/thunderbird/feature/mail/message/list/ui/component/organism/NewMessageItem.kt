@@ -39,6 +39,8 @@ fun NewMessageItem(
     onAvatarClick: () -> Unit,
     onFavouriteChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    showDivider: Boolean = true,
+    showAttachmentInTrailing: Boolean = false,
 ) {
     MessageItem(
         firstLine = {
@@ -64,6 +66,7 @@ fun NewMessageItem(
             preferences = preferences,
             color = MessageConversationCounterBadgeDefaults.newMessageColor(),
             accountIndicator = accountIndicator,
+            showAttachmentInTrailing = showAttachmentInTrailing,
         ),
         onClick = onClick,
         onLongClick = onLongClick,
@@ -84,5 +87,6 @@ fun NewMessageItem(
             else -> MessageItemDefaults.newMessageItemColors()
         },
         contentPadding = preferences.density.toContentPadding(),
+        showDivider = showDivider,
     )
 }

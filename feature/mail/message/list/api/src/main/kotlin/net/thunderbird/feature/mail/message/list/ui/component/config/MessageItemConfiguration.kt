@@ -68,8 +68,9 @@ internal fun rememberMessageItemConfiguration(
     preferences: MessageListPreferences,
     color: MessageConversationCounterBadgeColor,
     accountIndicator: MessageItemAccountIndicator?,
-): MessageItemConfiguration = remember(messageItemUi, preferences) {
-    val leadingItems = buildLeadingItems(messageItemUi, color)
+    showAttachmentInTrailing: Boolean = false,
+): MessageItemConfiguration = remember(messageItemUi, preferences, showAttachmentInTrailing) {
+    val leadingItems = buildLeadingItems(messageItemUi, color, showAttachmentInTrailing)
     MessageItemConfiguration(
         maxExcerptLines = preferences.excerptLines,
         leadingConfiguration = MessageItemLeadingConfiguration(
@@ -85,7 +86,7 @@ internal fun rememberMessageItemConfiguration(
             leadingItems = if (preferences.excerptLines > 0) leadingItems else persistentListOf(),
         ),
         trailingConfiguration = MessageItemTrailingConfiguration(
-            elements = buildTrailingElementsList(preferences, messageItemUi),
+            elements = buildTrailingElementsList(preferences, messageItemUi, showAttachmentInTrailing),
         ),
     )
 }
@@ -93,7 +94,11 @@ internal fun rememberMessageItemConfiguration(
 private fun buildTrailingElementsList(
     preferences: MessageListPreferences,
     messageItemUi: MessageItemUi,
+    showAttachmentInTrailing: Boolean,
 ): PersistentList<MessageItemTrailingElement> = buildList {
+    if (showAttachmentInTrailing && messageItemUi.hasAttachments) {
+        add(MessageItemTrailingElement.AttachmentIcon)
+    }
     if (messageItemUi.encrypted) {
         add(MessageItemTrailingElement.EncryptedBadge(isFavouriteHidden = !preferences.showFavouriteButton))
     }
@@ -105,6 +110,7 @@ private fun buildTrailingElementsList(
 private fun buildLeadingItems(
     messageItemUi: MessageItemUi,
     color: MessageConversationCounterBadgeColor,
+    showAttachmentInTrailing: Boolean,
 ): PersistentList<MessageSublineLeadingIndicator> = buildList {
     if (messageItemUi.threadCount > 1) {
         add(
@@ -114,7 +120,7 @@ private fun buildLeadingItems(
             ),
         )
     }
-    if (messageItemUi.hasAttachments) {
+    if (!showAttachmentInTrailing && messageItemUi.hasAttachments) {
         add(MessageSublineLeadingIndicator.AttachmentIcon)
     }
 }.toPersistentList()

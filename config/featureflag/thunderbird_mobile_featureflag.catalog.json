@@ -70,7 +70,8 @@
       "debug": {
         "display_in_app_notifications": true,
         "use_notification_sender_for_system_notifications": true,
-        "message_view_action_export_eml": true
+        "message_view_action_export_eml": true,
+        "enable_message_list_new_state": true
       },
       "daily": {
         "display_in_app_notifications": true,

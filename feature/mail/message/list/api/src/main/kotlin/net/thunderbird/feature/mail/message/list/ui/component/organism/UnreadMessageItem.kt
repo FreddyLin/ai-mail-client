@@ -39,6 +39,8 @@ fun UnreadMessageItem(
     onAvatarClick: () -> Unit,
     onFavouriteChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    showDivider: Boolean = true,
+    showAttachmentInTrailing: Boolean = false,
 ) {
     MessageItem(
         firstLine = {
@@ -64,6 +66,7 @@ fun UnreadMessageItem(
             preferences = preferences,
             color = MessageConversationCounterBadgeDefaults.unreadMessageColor(),
             accountIndicator = accountIndicator,
+            showAttachmentInTrailing = showAttachmentInTrailing,
         ),
         onClick = onClick,
         onLongClick = onLongClick,
@@ -84,5 +87,6 @@ fun UnreadMessageItem(
             else -> MessageItemDefaults.defaultMessageItemColors()
         },
         contentPadding = preferences.density.toContentPadding(),
+        showDivider = showDivider,
     )
 }

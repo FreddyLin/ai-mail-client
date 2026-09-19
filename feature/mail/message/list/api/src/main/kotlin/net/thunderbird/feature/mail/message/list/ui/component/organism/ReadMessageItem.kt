@@ -39,6 +39,8 @@ fun ReadMessageItem(
     onAvatarClick: () -> Unit,
     onFavouriteChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    showDivider: Boolean = true,
+    showAttachmentInTrailing: Boolean = false,
 ) {
     MessageItem(
         firstLine = {
@@ -65,6 +67,7 @@ fun ReadMessageItem(
             preferences = preferences,
             color = MessageConversationCounterBadgeDefaults.readMessageColor(),
             accountIndicator = accountIndicator,
+            showAttachmentInTrailing = showAttachmentInTrailing,
         ),
         onClick = onClick,
         onLongClick = onLongClick,
@@ -86,5 +89,6 @@ fun ReadMessageItem(
             else -> MessageItemDefaults.defaultMessageItemColors()
         },
         contentPadding = preferences.density.toContentPadding(),
+        showDivider = showDivider,
     )
 }

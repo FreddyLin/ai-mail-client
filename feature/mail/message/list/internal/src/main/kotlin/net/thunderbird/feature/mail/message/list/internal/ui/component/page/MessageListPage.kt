@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import net.thunderbird.components.ui.bolt.molecule.PullToRefreshBox
 import net.thunderbird.feature.mail.message.list.internal.ui.component.template.MessageList
+import net.thunderbird.feature.mail.message.list.ui.MessageListPresentation
 import net.thunderbird.feature.mail.message.list.ui.component.MessageListScope
 import net.thunderbird.feature.mail.message.list.ui.event.MessageListEvent
 import net.thunderbird.feature.mail.message.list.ui.state.MessageListState
@@ -18,6 +19,7 @@ internal fun MessageListScope.MessageListPage(
     state: MessageListState,
     dispatchEvent: (MessageListEvent) -> Unit,
     modifier: Modifier = Modifier,
+    presentation: MessageListPresentation = MessageListPresentation.Default,
 ) {
     InAppNotificationScaffold(
         eventFilter = inAppNotificationEventFilter,
@@ -30,7 +32,12 @@ internal fun MessageListScope.MessageListPage(
                 .fillMaxSize()
                 .padding(paddingValues),
         ) {
-            MessageList(state = state, dispatchEvent = dispatchEvent, modifier = Modifier.fillMaxSize())
+            MessageList(
+                state = state,
+                dispatchEvent = dispatchEvent,
+                modifier = Modifier.fillMaxSize(),
+                presentation = presentation,
+            )
         }
     }
 }

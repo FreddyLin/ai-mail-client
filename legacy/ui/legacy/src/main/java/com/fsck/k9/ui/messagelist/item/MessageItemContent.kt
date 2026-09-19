@@ -128,7 +128,8 @@ internal fun MessageListItem.toMessageItemUi(
         color = Color(account.profile.color),
     ),
     senders = ComposedAddressUi(
-        displayName = displayAddress?.address ?: "",
+        displayName = displayName.toString().trim().takeUnless { it.isEmpty() }
+            ?: displayAddress?.address.orEmpty(),
         displayNameStyles = buildSenderStyles(),
         avatar = when {
             !showContactPicture -> null

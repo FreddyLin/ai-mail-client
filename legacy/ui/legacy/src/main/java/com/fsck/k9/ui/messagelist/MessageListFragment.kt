@@ -95,6 +95,7 @@ import com.fsck.k9.ui.BuildConfig
 import com.fsck.k9.ui.R
 import com.fsck.k9.ui.choosefolder.ChooseFolderActivity
 import com.fsck.k9.ui.choosefolder.ChooseFolderResultContract
+import com.fsck.k9.ui.helper.RelativeDateTimeFormatter
 import com.fsck.k9.ui.messagelist.MessageListFragmentBridgeContract.Companion.ARG_IS_THREAD_DISPLAY
 import com.fsck.k9.ui.messagelist.MessageListFragmentBridgeContract.Companion.ARG_SEARCH
 import com.fsck.k9.ui.messagelist.MessageListFragmentBridgeContract.Companion.ARG_THREADED_LIST
@@ -153,6 +154,7 @@ import net.thunderbird.feature.mail.message.list.domain.model.SortType
 import net.thunderbird.feature.mail.message.list.extension.toDomainSortType
 import net.thunderbird.feature.mail.message.list.preferences.MessageListPreferences
 import net.thunderbird.feature.mail.message.list.ui.MessageListContract
+import net.thunderbird.feature.mail.message.list.ui.MessageListPresentation
 import net.thunderbird.feature.mail.message.list.ui.component.MessageListScope
 import net.thunderbird.feature.mail.message.list.ui.effect.MessageListEffect
 import net.thunderbird.feature.mail.message.list.ui.event.MessageItemEvent
@@ -204,6 +206,8 @@ class MessageListFragment :
     override val fragmentActivity: FragmentActivity? get() = activity
 
     private val messageListScreenRenderer: MessageListContract.MessageListScreenRenderer by inject()
+    private val linusMailInboxEnabled: Boolean
+        get() = resources.getBoolean(R.bool.linus_mail_inbox_enabled)
 
     // region [ LegacyMessageListFragment properties ]
     override val legacyViewModel: MessageListViewModel by viewModel()
@@ -217,6 +221,7 @@ class MessageListFragment :
     private val accountManager: LegacyAccountManager by inject()
     private val connectivityManager: ConnectivityManager by inject()
     private val localStoreProvider: LocalStoreProvider by inject()
+    private val relativeDateTimeFormatter: RelativeDateTimeFormatter by inject()
 
     private val featureThemeProvider: FeatureThemeProvider by inject()
     private val logger: Logger by inject()
@@ -2368,15 +2373,22 @@ class MessageListFragment :
             .asFlow()
             .map { info ->
                 info.messageListItems.map { item ->
-                    val url = contactRepository.getPhotoUri(
-                        item.displayAddress?.address ?: "",
-                    )
+                    val url = if (linusMailInboxEnabled) {
+                        null
+                    } else {
+                        contactRepository.getPhotoUri(item.displayAddress?.address ?: "")
+                    }
                     val monogram = avatarMonogramCreator.create(
                         item.displayName.toString(),
                         item.displayAddress?.address,
                     )
-                    item.toMessageItemUi(
-                        showContactPicture = preferences.showMessageAvatar,
+                    item.copy(
+                        displayMessageDateTime = relativeDateTimeFormatter.formatDate(
+                            item.messageDate,
+                            preferences.dateTimeFormat,
+                        ),
+                    ).toMessageItemUi(
+                        showContactPicture = linusMailInboxEnabled || preferences.showMessageAvatar,
                         isSelected = false,
                         isActive = item.messageReference == activeMessage,
                         monogram = monogram,
@@ -2399,6 +2411,11 @@ class MessageListFragment :
                                 onEffect = { handleMessageListEffect(it) },
                                 inAppNotificationEventFilter = ::filterInAppNotificationEvents,
                                 viewModel = viewModel,
+                                presentation = if (linusMailInboxEnabled) {
+                                    MessageListPresentation.LinusMail
+                                } else {
+                                    MessageListPresentation.Default
+                                },
                             )
                         }
                     }

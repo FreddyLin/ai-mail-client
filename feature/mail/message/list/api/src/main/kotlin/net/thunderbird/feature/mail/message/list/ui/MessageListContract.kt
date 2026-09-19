@@ -78,6 +78,7 @@ interface MessageListContract {
             dispatchEvent: (MessageListEvent) -> Unit,
             modifier: Modifier = Modifier,
             inAppNotificationEventFilter: (InAppNotification) -> Boolean = { true },
+            presentation: MessageListPresentation = MessageListPresentation.Default,
         )
 
         /**
@@ -97,12 +98,13 @@ interface MessageListContract {
             modifier: Modifier = Modifier,
             viewModel: ViewModel = koinViewModel(),
             inAppNotificationEventFilter: (InAppNotification) -> Boolean = { true },
+            presentation: MessageListPresentation = MessageListPresentation.Default,
         ) {
             val scope = rememberMessageListScope()
             val (state, dispatchEvent) = viewModel.observe { effect ->
                 scope.onEffect(effect)
             }
-            scope.Render(state.value, dispatchEvent, modifier, inAppNotificationEventFilter)
+            scope.Render(state.value, dispatchEvent, modifier, inAppNotificationEventFilter, presentation)
         }
     }
 }

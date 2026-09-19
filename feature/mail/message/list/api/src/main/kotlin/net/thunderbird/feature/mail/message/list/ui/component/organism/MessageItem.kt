@@ -105,6 +105,7 @@ internal fun MessageItem(
     colors: MessageItemColors = MessageItemDefaults.readMessageItemColors(),
     selected: Boolean = false,
     contentPadding: PaddingValues = MessageItemDefaults.defaultContentPadding,
+    showDivider: Boolean = true,
     onClick: () -> Unit = {},
     onLongClick: () -> Unit = {},
     onAvatarClick: () -> Unit = {},
@@ -113,7 +114,13 @@ internal fun MessageItem(
     Surface(
         modifier = modifier
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .borderBottom(width = 1.dp, color = BoltTheme.colors.outlineVariant),
+            .then(
+                if (showDivider) {
+                    Modifier.borderBottom(width = 1.dp, color = BoltTheme.colors.outlineVariant)
+                } else {
+                    Modifier
+                },
+            ),
         color = colors.containerColor,
         contentColor = colors.contentColor,
     ) {
@@ -152,6 +159,11 @@ internal fun MessageItem(
             ) {
                 configuration.trailingConfiguration.elements.forEach { element ->
                     when (element) {
+                        MessageItemTrailingElement.AttachmentIcon -> Icon(
+                            imageVector = Icons.Outlined.Attachment,
+                            contentDescription = null,
+                        )
+
                         is MessageItemTrailingElement.EncryptedBadge -> Icon(
                             imageVector = Icons.Outlined.Encrypted,
                             contentDescription = null,
