@@ -1338,26 +1338,24 @@ class MessageListFragment :
     }
 
     override fun onToggleMessageFlag(item: MessageListItem) {
-        val preferences = stateSnapshot.preferences
-        val messageItem = item.toMessageItemUi(
-            showContactPicture = preferences?.showMessageAvatar == true,
-            isSelected = item.messageReference in selectedMessages,
-            isActive = item.messageReference == activeMessage,
-            monogram = "",
-            url = null,
-        )
-        setFlag(messageItem, Flag.FLAGGED, !item.isStarred)
+        setFlag(item, Flag.FLAGGED, !item.isStarred)
     }
 
     private fun setFlag(messageItemUi: MessageItemUi, flag: Flag, newState: Boolean) {
-        val account = messageItemUi.account
-        if (showingThreadedList && messageItemUi.threadCount > 1) {
-            // TODO
-//            val threadRootId = messageItemUi.threadRoot
-//            messagingController.setFlagForThreads(account.id, listOf(threadRootId), flag, newState)
+        val messageReference = MessageReference.parse(messageItemUi.messageReference) ?: return
+        legacyViewModel.getMessageListLiveData().value
+            ?.messageListItems
+            .orEmpty()
+            .firstOrNull { it.messageReference == messageReference }
+            ?.let { setFlag(it, flag, newState) }
+    }
+
+    private fun setFlag(messageListItem: MessageListItem, flag: Flag, newState: Boolean) {
+        val account = messageListItem.account
+        if (showingThreadedList && messageListItem.threadCount > 1) {
+            messagingController.setFlagForThreads(account.id, listOf(messageListItem.threadRoot), flag, newState)
         } else {
-            val messageId = messageItemUi.id.toLong()
-            messagingController.setFlag(account.id, listOf(messageId), flag, newState)
+            messagingController.setFlag(account.id, listOf(messageListItem.databaseId), flag, newState)
         }
     }
 
@@ -1367,19 +1365,25 @@ class MessageListFragment :
         val messageMap = mutableMapOf<LegacyAccount, MutableList<Long>>()
         val threadMap = mutableMapOf<LegacyAccount, MutableList<Long>>()
         val accounts = mutableSetOf<LegacyAccount>()
-        // TODO(#10775): apply the flag to each selected message.
-//        for (messageListItem in adapter.selectedMessages) {
-//            val account = messageListItem.account
-//            accounts.add(account)
-//
-//            if (showingThreadedList && messageListItem.threadCount > 1) {
-//                val threadRootIdList = threadMap.getOrPut(account) { mutableListOf() }
-//                threadRootIdList.add(messageListItem.threadRoot)
-//            } else {
-//                val messageIdList = messageMap.getOrPut(account) { mutableListOf() }
-//                messageIdList.add(messageListItem.databaseId)
-//            }
-//        }
+        val selectedMessageReferences = selectedMessages.toSet()
+        val loadedMessageItems = legacyViewModel.getMessageListLiveData().value
+            ?.messageListItems
+            .orEmpty()
+        val selectedMessageItems = loadedMessageItems
+            .filter { it.messageReference in selectedMessageReferences }
+
+        for (messageListItem in selectedMessageItems) {
+            val account = messageListItem.account
+            accounts.add(account)
+
+            if (showingThreadedList && messageListItem.threadCount > 1) {
+                val threadRootIdList = threadMap.getOrPut(account) { mutableListOf() }
+                threadRootIdList.add(messageListItem.threadRoot)
+            } else {
+                val messageIdList = messageMap.getOrPut(account) { mutableListOf() }
+                messageIdList.add(messageListItem.databaseId)
+            }
+        }
 
         for (account in accounts) {
             messageMap[account]?.let { messageIds ->
@@ -1749,7 +1753,7 @@ class MessageListFragment :
 
     override fun onToggleRead() {
         focusedMessage?.let { messageListItem ->
-            setFlag(messageListItem, Flag.SEEN, !messageListItem.starred)
+            setFlag(messageListItem, Flag.SEEN, messageListItem.state != MessageItemUi.State.Read)
         }
     }
 
@@ -2460,6 +2464,9 @@ class MessageListFragment :
                         else -> secondarySortType == SortType.DateAsc
                     },
                 )
+                if (linusMailInboxEnabled && !isManualSearch) {
+                    checkMail()
+                }
                 loadMessageList()
             }
 
@@ -2468,6 +2475,15 @@ class MessageListFragment :
                     "The message reference should not be null when opening a message. Message: $effect"
                 }
                 openMessage(messageReference)
+            }
+
+            is MessageListEffect.SetMessageFlag -> effect.messages.forEach { message ->
+                val newState = when (effect.flag) {
+                    Flag.SEEN -> message.state != MessageItemUi.State.Read
+                    Flag.FLAGGED -> !message.starred
+                    else -> return@forEach
+                }
+                setFlag(message, effect.flag, newState)
             }
 
             MessageListEffect.TriggerOnFooterClicked -> onFooterClicked()

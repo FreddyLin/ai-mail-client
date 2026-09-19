@@ -23,6 +23,23 @@ internal fun StateMachineBuilder<MessageListState, MessageListEvent>.selectingMe
     dispatchUiEffect: (MessageListEffect) -> Unit,
 ) {
     state<MessageListState.SelectingMessages> {
+        transition<MessageListEvent.UpdateLoadingProgress>(
+            guard = { _, event -> event.progress == 1f },
+        ) { state, event ->
+            val selectedReferences = state.messages
+                .filter { it.selected }
+                .map { it.messageReference }
+                .toSet()
+
+            state.copy(
+                messages = event.messages
+                    .map { message ->
+                        message.copy(selected = message.messageReference in selectedReferences)
+                    }
+                    .toPersistentList(),
+            )
+        }
+
         transition<MessageItemEvent.ToggleSelectMessages> { state, event ->
             toggleSelectMessages(state, event.messages, dispatch, dispatchUiEffect)
         }

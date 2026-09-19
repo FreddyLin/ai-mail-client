@@ -1,5 +1,6 @@
 package net.thunderbird.feature.mail.message.list.ui.effect
 
+import net.thunderbird.core.common.mail.Flag
 import net.thunderbird.feature.account.AccountId
 import net.thunderbird.feature.mail.message.list.ui.state.MessageItemUi
 import net.thunderbird.feature.mail.message.list.ui.state.MessageListState
@@ -100,6 +101,14 @@ sealed interface MessageListEffect {
     data class ScrollToMessage(val message: MessageItemUi) : MessageListEffect
 
     data class OpenMessage(val message: MessageItemUi) : MessageListEffect
+
+    /**
+     * Requests the legacy bridge to apply a flag to the supplied messages.
+     */
+    data class SetMessageFlag(
+        val messages: List<MessageItemUi>,
+        val flag: Flag,
+    ) : MessageListEffect
 
     // region [ Legacy Support ]
     data object TriggerOnFooterClicked : MessageListEffect
