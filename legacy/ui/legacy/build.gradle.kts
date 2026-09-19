@@ -68,6 +68,8 @@ dependencies {
     implementation(libs.fastadapter.extensions.utils)
     implementation(libs.circleImageView)
     implementation(libs.androidx.work.runtime)
+    implementation(libs.jetbrains.compose.material3)
+    implementation(libs.jetbrains.compose.material.icons.extended)
 
     implementation(libs.commons.io)
     implementation(libs.androidx.core.ktx)

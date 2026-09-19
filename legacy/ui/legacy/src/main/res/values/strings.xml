@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="linus_mail_nav_mail">Mail</string>
+    <string name="linus_mail_nav_actions">Aktionen</string>
+    <string name="linus_mail_nav_search">Suche</string>
+    <string name="linus_mail_placeholder_description">Dieser Bereich wird in einem späteren Schritt erweitert.</string>
     <!-- === App-specific strings ============================================================= -->
 
     <!-- Used in the about dialog -->

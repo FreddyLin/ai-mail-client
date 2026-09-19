@@ -10,6 +10,7 @@ import android.view.KeyEvent
 import android.view.MenuItem
 import android.view.View
 import android.view.animation.AnimationUtils
+import android.widget.FrameLayout
 import android.widget.ProgressBar
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.ActionBar
@@ -36,6 +37,7 @@ import com.fsck.k9.CoreResourceProvider
 import com.fsck.k9.K9.fontSizes
 import com.fsck.k9.Preferences
 import com.fsck.k9.activity.compose.MessageActions
+import com.fsck.k9.activity.linusmail.LinusMailNavigationHost
 import com.fsck.k9.controller.MessagingController
 import com.fsck.k9.search.isUnifiedFolders
 import com.fsck.k9.ui.BuildConfig
@@ -153,6 +155,7 @@ open class MessageHomeActivity :
     private var messageViewOnly = false
     private var messageListWasDisplayed = false
     private var viewSwitcher: ViewSwitcher? = null
+    private var linusMailNavigationHost: LinusMailNavigationHost? = null
 
     private val isShowAccountIndicator: Boolean
         get() = messageListFragment?.isShowAccountIndicator ?: true
@@ -198,15 +201,29 @@ open class MessageHomeActivity :
         initializeLayout()
         initializeFragments()
         displayViews()
+        initializeLinusMailNavigation()
         initializeFunding()
         initializeFoldableObserver()
 
         val backPressedCallback = object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                if (linusMailNavigationHost?.showMail() == true) return
                 this@MessageHomeActivity.handleOnBackPressed(this)
             }
         }
         onBackPressedDispatcher.addCallback(this, backPressedCallback)
+    }
+
+    private fun initializeLinusMailNavigation() {
+        if (!resources.getBoolean(R.bool.linus_mail_navigation_enabled)) return
+
+        val contentRoot = findViewById<FrameLayout>(android.R.id.content)
+        val mailContent = contentRoot.getChildAt(0) ?: return
+        linusMailNavigationHost = LinusMailNavigationHost(
+            context = this,
+            root = contentRoot,
+            mailContent = mailContent,
+        ).also { it.install() }
     }
 
     private fun initializeFoldableObserver() {
