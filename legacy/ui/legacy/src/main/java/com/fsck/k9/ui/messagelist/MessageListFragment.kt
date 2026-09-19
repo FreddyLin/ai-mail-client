@@ -111,6 +111,8 @@ import com.fsck.k9.ui.messagelist.MessageListFragmentBridgeContract.MessageListF
 import com.fsck.k9.ui.messagelist.debug.AuthDebugActions
 import com.fsck.k9.ui.messagelist.item.toMessageItemUi
 import com.fsck.k9.ui.messagelist.smartcategory.SmartCategoryRepository
+import com.fsck.k9.ui.messagelist.smartcategory.SmartCategoryMessage
+import com.fsck.k9.ui.messagelist.smartcategory.SmartCategoryRuleEngine
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -231,6 +233,7 @@ class MessageListFragment :
     private val featureThemeProvider: FeatureThemeProvider by inject()
     private val logger: Logger by inject()
     private val smartCategoryRepository: SmartCategoryRepository by inject()
+    private val smartCategoryRuleEngine = SmartCategoryRuleEngine()
     private val outboxFolderManager: OutboxFolderManager by inject()
     private val authDebugActions: AuthDebugActions by inject()
     private val errorNotificationsDialogFragmentFactory: ErrorNotificationsDialogFragmentFactory by inject()
@@ -449,7 +452,11 @@ class MessageListFragment :
         if (linusMailInboxEnabled) {
             smartCategoryRepository.observeAssignments()
                 .onEach { assignments ->
-                    viewModel.event(MessageListEvent.SmartCategoryAssignmentsLoaded(assignments))
+                    viewModel.event(
+                        MessageListEvent.SmartCategoryAssignmentsLoaded(
+                            assignments.mapValues { (_, value) -> value.assigned.keys },
+                        ),
+                    )
                 }
                 .launchIn(viewLifecycleOwner.lifecycleScope)
         }
@@ -2445,6 +2452,21 @@ class MessageListFragment :
             .getMessageListLiveData()
             .asFlow()
             .map { info ->
+                if (linusMailInboxEnabled) {
+                    info.messageListItems.forEach { item ->
+                        smartCategoryRepository.applyRuleCategories(
+                            messageReference = item.messageReference.toIdentityString(),
+                            categories = smartCategoryRuleEngine.classify(
+                                SmartCategoryMessage(
+                                    senderAddress = item.displayAddress?.address,
+                                    subject = item.subject,
+                                    preview = item.previewText,
+                                    hasAttachments = item.hasAttachments,
+                                ),
+                            ),
+                        )
+                    }
+                }
                 info.messageListItems.map { item ->
                     val url = if (linusMailInboxEnabled) {
                         null
