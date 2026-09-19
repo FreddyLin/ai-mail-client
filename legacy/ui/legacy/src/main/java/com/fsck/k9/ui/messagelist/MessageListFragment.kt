@@ -20,6 +20,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.annotation.StringRes
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.appcompat.view.ActionMode
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SearchView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -109,6 +110,7 @@ import com.fsck.k9.ui.messagelist.MessageListFragmentBridgeContract.MessageListF
 import com.fsck.k9.ui.messagelist.MessageListFragmentBridgeContract.MessageListFragmentListener.Companion.MAX_PROGRESS
 import com.fsck.k9.ui.messagelist.debug.AuthDebugActions
 import com.fsck.k9.ui.messagelist.item.toMessageItemUi
+import com.fsck.k9.ui.messagelist.smartcategory.SmartCategoryRepository
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -159,10 +161,13 @@ import net.thunderbird.feature.mail.message.list.ui.component.MessageListScope
 import net.thunderbird.feature.mail.message.list.ui.effect.MessageListEffect
 import net.thunderbird.feature.mail.message.list.ui.event.MessageItemEvent
 import net.thunderbird.feature.mail.message.list.ui.event.MessageListEvent
+import net.thunderbird.feature.mail.message.list.ui.event.MessageListEvent.RemoveSmartCategory
 import net.thunderbird.feature.mail.message.list.ui.legacy.LegacyMessageListBridge
 import net.thunderbird.feature.mail.message.list.ui.state.MessageItemUi
 import net.thunderbird.feature.mail.message.list.ui.state.MessageListMetadata
 import net.thunderbird.feature.mail.message.list.ui.state.MessageListState
+import net.thunderbird.feature.mail.message.list.ui.state.SmartCategory
+import net.thunderbird.feature.mail.message.list.ui.event.MessageListEvent.AssignSmartCategory
 import net.thunderbird.feature.navigation.changelog.api.ChangeLogMode
 import net.thunderbird.feature.notification.api.content.InAppNotification
 import net.thunderbird.feature.notification.api.content.SentFolderNotFoundNotification
@@ -225,6 +230,7 @@ class MessageListFragment :
 
     private val featureThemeProvider: FeatureThemeProvider by inject()
     private val logger: Logger by inject()
+    private val smartCategoryRepository: SmartCategoryRepository by inject()
     private val outboxFolderManager: OutboxFolderManager by inject()
     private val authDebugActions: AuthDebugActions by inject()
     private val errorNotificationsDialogFragmentFactory: ErrorNotificationsDialogFragmentFactory by inject()
@@ -438,6 +444,14 @@ class MessageListFragment :
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         legacyViewModel.getMessageListLiveData().observe(viewLifecycleOwner) { messageListInfo: MessageListInfo ->
             setMessageList(messageListInfo)
+        }
+
+        if (linusMailInboxEnabled) {
+            smartCategoryRepository.observeAssignments()
+                .onEach { assignments ->
+                    viewModel.event(MessageListEvent.SmartCategoryAssignmentsLoaded(assignments))
+                }
+                .launchIn(viewLifecycleOwner.lifecycleScope)
         }
 
         val menuHost: MenuHost = requireActivity()
@@ -2139,6 +2153,7 @@ class MessageListFragment :
             markAsUnread = menu.findItem(R.id.mark_as_unread)
             flag = menu.findItem(R.id.flag)
             unflag = menu.findItem(R.id.unflag)
+            menu.findItem(R.id.assign_smart_category).isVisible = linusMailInboxEnabled
 
             // we don't support cross account actions atm
             if (!isSingleAccountMode) {
@@ -2177,6 +2192,7 @@ class MessageListFragment :
 
         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
             mode.menuInflater.inflate(R.menu.message_list_context_menu, menu)
+            menu.findItem(R.id.assign_smart_category).isVisible = linusMailInboxEnabled
 
             setContextCapabilities(account, menu)
             return true
@@ -2312,6 +2328,11 @@ class MessageListFragment :
                     true
                 }
 
+                R.id.assign_smart_category -> {
+                    showSmartCategoryPicker()
+                    false
+                }
+
                 else -> return false
             }
 
@@ -2320,6 +2341,54 @@ class MessageListFragment :
             }
 
             return true
+        }
+
+        private fun showSmartCategoryPicker() {
+            val categories = SmartCategory.entries.filter { it != SmartCategory.ALL }
+            val messageReferences = selectedMessages.map { it.toIdentityString() }
+            val assignments = stateSnapshot.metadata.smartCategoryAssignments
+            val labels = categories.map { category ->
+                val isAssignedToAll = messageReferences.isNotEmpty() && messageReferences.all { reference ->
+                    assignments[reference]?.contains(category) == true
+                }
+                if (isAssignedToAll) {
+                    "✓ ${getString(category.labelResource())}"
+                } else {
+                    getString(category.labelResource())
+                }
+            }.toTypedArray()
+            AlertDialog.Builder(requireContext())
+                .setTitle(R.string.assign_smart_category_action)
+                .setItems(labels) { _, index ->
+                    val category = categories[index]
+                    val isAssignedToAll = messageReferences.isNotEmpty() && messageReferences.all { reference ->
+                        assignments[reference]?.contains(category) == true
+                    }
+                    messageReferences.forEach { reference ->
+                        if (isAssignedToAll) {
+                            smartCategoryRepository.removeCategory(reference, category)
+                        } else {
+                            smartCategoryRepository.assignCategory(reference, category)
+                        }
+                    }
+                    viewModel.event(
+                        if (isAssignedToAll) {
+                            RemoveSmartCategory(messageReferences, category)
+                        } else {
+                            AssignSmartCategory(messageReferences, category)
+                        },
+                    )
+                }
+                .show()
+        }
+
+        private fun SmartCategory.labelResource(): Int = when (this) {
+            SmartCategory.ALL -> net.thunderbird.feature.mail.message.list.R.string.smart_category_all
+            SmartCategory.IMPORTANT -> net.thunderbird.feature.mail.message.list.R.string.smart_category_important
+            SmartCategory.ACTION -> net.thunderbird.feature.mail.message.list.R.string.smart_category_action
+            SmartCategory.INVOICE -> net.thunderbird.feature.mail.message.list.R.string.smart_category_invoice
+            SmartCategory.ORDER -> net.thunderbird.feature.mail.message.list.R.string.smart_category_order
+            SmartCategory.NEWSLETTER -> net.thunderbird.feature.mail.message.list.R.string.smart_category_newsletter
         }
     }
 

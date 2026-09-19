@@ -1,6 +1,8 @@
 package com.fsck.k9.ui.messagelist
 
 import com.fsck.k9.ui.messagelist.debug.AuthDebugActions
+import com.fsck.k9.ui.messagelist.smartcategory.SharedPreferencesSmartCategoryRepository
+import com.fsck.k9.ui.messagelist.smartcategory.SmartCategoryRepository
 import net.thunderbird.feature.navigation.drawer.dropdown.navigationDropDownDrawerModule
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
@@ -36,4 +38,5 @@ val messageListUiModule = module {
         )
     }
     single { SortTypeToastProvider() }
+    single<SmartCategoryRepository> { SharedPreferencesSmartCategoryRepository(context = get()) }
 }

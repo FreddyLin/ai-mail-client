@@ -3,6 +3,7 @@ package net.thunderbird.feature.mail.message.list.internal.ui.state.machine
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.collections.immutable.toPersistentMap
+import kotlinx.collections.immutable.toPersistentSet
 import net.thunderbird.core.common.state.builder.StateMachineBuilder
 import net.thunderbird.feature.account.UnifiedAccountId
 import net.thunderbird.feature.mail.message.list.ui.event.FolderEvent
@@ -30,6 +31,43 @@ internal fun StateMachineBuilder<MessageListState, MessageListEvent>.globalState
 
         transition<MessageListEvent.SwipeActionsLoaded> { state, (swipeActions) ->
             state.withMetadata { copy(swipeActions = swipeActions.toImmutableMap()) }
+        }
+
+        transition<MessageListEvent.SelectSmartCategory> { state, event ->
+            state.withMetadata { copy(selectedSmartCategory = event.category) }
+        }
+
+        transition<MessageListEvent.AssignSmartCategory> { state, event ->
+            val updatedAssignments = state.metadata.smartCategoryAssignments.toMutableMap()
+            event.messageReferences.forEach { messageReference ->
+                val categories = updatedAssignments[messageReference].orEmpty().toMutableSet()
+                categories += event.category
+                updatedAssignments[messageReference] = categories.toPersistentSet()
+            }
+            state.withMetadata { copy(smartCategoryAssignments = updatedAssignments.toPersistentMap()) }
+        }
+
+        transition<MessageListEvent.RemoveSmartCategory> { state, event ->
+            val updatedAssignments = state.metadata.smartCategoryAssignments.toMutableMap()
+            event.messageReferences.forEach { messageReference ->
+                val categories = updatedAssignments[messageReference].orEmpty() - event.category
+                if (categories.isEmpty()) {
+                    updatedAssignments.remove(messageReference)
+                } else {
+                    updatedAssignments[messageReference] = categories.toPersistentSet()
+                }
+            }
+            state.withMetadata { copy(smartCategoryAssignments = updatedAssignments.toPersistentMap()) }
+        }
+
+        transition<MessageListEvent.SmartCategoryAssignmentsLoaded> { state, event ->
+            state.withMetadata {
+                copy(
+                    smartCategoryAssignments = event.assignments
+                        .mapValues { (_, categories) -> categories.toPersistentSet() }
+                        .toPersistentMap(),
+                )
+            }
         }
 
         transition<FolderEvent.FolderLoaded> { state, (folder) ->

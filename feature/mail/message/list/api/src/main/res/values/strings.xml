@@ -28,4 +28,11 @@
     <string name="swipe_action_spam">Spam</string>
     <string name="swipe_action_move">Move…</string>
     <string name="actionbar_selected">%d selected</string>
+    <string name="smart_category_all">Alle</string>
+    <string name="smart_category_important">Wichtig</string>
+    <string name="smart_category_action">Aktion</string>
+    <string name="smart_category_invoice">Rechnungen</string>
+    <string name="smart_category_order">Bestellungen</string>
+    <string name="smart_category_newsletter">Newsletter</string>
+    <string name="smart_category_empty">Keine Nachrichten in %1$s</string>
 </resources>

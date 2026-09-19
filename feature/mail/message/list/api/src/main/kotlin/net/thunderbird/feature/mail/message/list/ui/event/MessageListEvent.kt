@@ -5,6 +5,7 @@ import net.thunderbird.feature.account.AccountId
 import net.thunderbird.feature.mail.message.list.domain.model.SortCriteria
 import net.thunderbird.feature.mail.message.list.preferences.MessageListPreferences
 import net.thunderbird.feature.mail.message.list.ui.state.MessageItemUi
+import net.thunderbird.feature.mail.message.list.ui.state.SmartCategory
 
 /**
  * Represents the events that can be triggered from the message list screen.
@@ -112,6 +113,22 @@ sealed interface MessageListEvent {
      * @see MessageListEvent
      */
     data object LoadNextPage : UserEvent
+
+    data class SelectSmartCategory(val category: SmartCategory) : UserEvent
+
+    data class AssignSmartCategory(
+        val messageReferences: List<String>,
+        val category: SmartCategory,
+    ) : UserEvent
+
+    data class RemoveSmartCategory(
+        val messageReferences: List<String>,
+        val category: SmartCategory,
+    ) : UserEvent
+
+    data class SmartCategoryAssignmentsLoaded(
+        val assignments: Map<String, Set<SmartCategory>>,
+    ) : SystemEvent
 
     // region [ Legacy Support events ]
     data class UpdateFooter(val footer: String?) : SystemEvent

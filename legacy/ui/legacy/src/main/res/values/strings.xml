@@ -87,6 +87,7 @@
     <string name="remove_account_action">Remove account</string>
 
     <string name="mark_as_read_action">Mark as read</string>
+    <string name="assign_smart_category_action">Kategorie zuweisen</string>
     <string name="send_alternate_action">Share</string>
     <string name="send_alternate_chooser_title">Choose sender</string>
 

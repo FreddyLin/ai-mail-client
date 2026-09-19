@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import net.thunderbird.components.ui.bolt.molecule.PullToRefreshBox
 import net.thunderbird.feature.mail.message.list.internal.ui.component.template.MessageList
+import net.thunderbird.feature.mail.message.list.internal.ui.component.organism.SmartCategoryFilterRow
 import net.thunderbird.feature.mail.message.list.ui.MessageListPresentation
 import net.thunderbird.feature.mail.message.list.ui.component.MessageListScope
 import net.thunderbird.feature.mail.message.list.ui.event.MessageListEvent
@@ -32,12 +33,24 @@ internal fun MessageListScope.MessageListPage(
                 .fillMaxSize()
                 .padding(paddingValues),
         ) {
-            MessageList(
-                state = state,
-                dispatchEvent = dispatchEvent,
-                modifier = Modifier.fillMaxSize(),
-                presentation = presentation,
-            )
+            if (presentation == MessageListPresentation.LinusMail) {
+                androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
+                    SmartCategoryFilterRow(state = state, dispatchEvent = dispatchEvent)
+                    MessageList(
+                        state = state,
+                        dispatchEvent = dispatchEvent,
+                        modifier = Modifier.weight(1f),
+                        presentation = presentation,
+                    )
+                }
+            } else {
+                MessageList(
+                    state = state,
+                    dispatchEvent = dispatchEvent,
+                    modifier = Modifier.fillMaxSize(),
+                    presentation = presentation,
+                )
+            }
         }
     }
 }

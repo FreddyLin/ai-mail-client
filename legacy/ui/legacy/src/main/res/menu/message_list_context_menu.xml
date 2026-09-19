@@ -68,4 +68,10 @@
         app:showAsAction="never"
         android:title="@string/batch_select_all"
         />
+    <item
+        android:id="@+id/assign_smart_category"
+        app:showAsAction="never"
+        android:title="@string/assign_smart_category_action"
+        android:visible="false"
+        />
 </menu>

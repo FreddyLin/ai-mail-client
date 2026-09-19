@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.lifecycle.compose.LifecycleStartEffect
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import net.thunderbird.components.ui.bolt.theme.BoltTheme
@@ -34,6 +35,8 @@ import net.thunderbird.feature.mail.message.list.ui.event.MessageListEvent
 import net.thunderbird.feature.mail.message.list.ui.state.MessageItemUi
 import net.thunderbird.feature.mail.message.list.ui.state.MessageListState
 import net.thunderbird.feature.mail.message.list.ui.state.PaginationUi
+import net.thunderbird.feature.mail.message.list.ui.state.SmartCategory
+import net.thunderbird.feature.mail.message.list.internal.ui.component.organism.SmartCategoryEmptyState
 
 const val TEST_TAG_MESSAGE_LIST_ROOT = "TestMessageList_Root"
 
@@ -48,16 +51,27 @@ internal fun MessageListScope.MessageList(
 
     val showAccountIndicator = state.metadata.showAccountIndicator
     val swipeActions = state.metadata.swipeActions
+    val visibleMessages = state.messages.filter { message ->
+        val category = state.metadata.selectedSmartCategory
+        category == SmartCategory.ALL ||
+            state.metadata.smartCategoryAssignments[message.messageReference]?.contains(category) == true
+    }.toImmutableList()
 
-    ScrollEventEffect(state.messages, listState)
+    ScrollEventEffect(visibleMessages, listState)
 
     LazyColumn(
         modifier = modifier.testTag(TEST_TAG_MESSAGE_LIST_ROOT),
         state = listState,
         contentPadding = PaddingValues(bottom = BoltTheme.sizes.large),
     ) {
+        if (visibleMessages.isEmpty() && state.metadata.selectedSmartCategory != SmartCategory.ALL) {
+            item {
+                SmartCategoryEmptyState(state.metadata.selectedSmartCategory)
+            }
+        }
+
         items(
-            items = state.messages,
+            items = visibleMessages,
             key = { message -> message.id },
         ) { message ->
             val messageSwipeActions = swipeActions[message.account.id]

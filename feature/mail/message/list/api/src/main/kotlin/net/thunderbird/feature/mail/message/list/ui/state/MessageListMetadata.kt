@@ -3,6 +3,7 @@ package net.thunderbird.feature.mail.message.list.ui.state
 import androidx.compose.runtime.Immutable
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toPersistentSet
 import net.thunderbird.core.common.action.SwipeActions
 import net.thunderbird.feature.account.AccountId
@@ -39,6 +40,8 @@ data class MessageListMetadata(
     val footer: MessageListFooter = MessageListFooter(),
     val showAccountIndicator: Boolean = false,
     val paging: PaginationUi = PaginationUi(),
+    val selectedSmartCategory: SmartCategory = SmartCategory.ALL,
+    val smartCategoryAssignments: ImmutableMap<String, ImmutableSet<SmartCategory>> = persistentMapOf(),
 ) {
     /**
      * Indicates whether the message list metadata contains all required data to display the message list.
