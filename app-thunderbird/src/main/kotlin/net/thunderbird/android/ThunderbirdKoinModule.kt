@@ -14,12 +14,14 @@ import net.thunderbird.android.widget.provider.UnreadWidgetProvider
 import net.thunderbird.android.widget.widgetModule
 import net.thunderbird.app.common.appCommonModule
 import net.thunderbird.core.common.oauth.OAuthConfigurationFactory
+import net.thunderbird.feature.ai.internal.featureAiModule
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 val appModule = module {
     includes(thunderbirdFeatureFlagModule)
     includes(appCommonModule)
+    includes(featureAiModule)
 
     includes(widgetModule)
     includes(featureModule)

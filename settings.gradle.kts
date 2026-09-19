@@ -89,6 +89,11 @@ include(
 )
 
 include(
+    ":feature:ai:api",
+    ":feature:ai:internal",
+)
+
+include(
     ":feature:account:api",
     ":feature:account:avatar:api",
     ":feature:account:avatar:impl",
