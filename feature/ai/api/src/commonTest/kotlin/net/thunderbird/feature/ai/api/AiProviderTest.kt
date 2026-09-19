@@ -4,6 +4,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class AiProviderTest {
@@ -67,6 +68,15 @@ class AiProviderTest {
         )
 
         assertEquals(AiResult.Failure(AiError.ProviderNotConfigured), result)
+    }
+
+    @Test
+    fun `credentials are not part of an AI request`() {
+        val credential = AiCredential("secret-value")
+        val request = AiRequest.Classification(AiClassificationInput(subject = "Subject"))
+
+        assertFalse(request.toString().contains(credential.secret))
+        assertEquals("AiCredential(redacted)", credential.toString())
     }
 
     private class FakeAiProviderRegistry(

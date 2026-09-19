@@ -38,8 +38,22 @@ interface AiProviderRegistry {
 
     fun providerFor(capability: AiCapability): AiProvider?
 
+    fun providerFor(providerId: AiProviderId, capability: AiCapability): AiProvider? =
+        providerFor(capability)?.takeIf { it.id == providerId }
+
     suspend fun execute(request: AiRequest): AiResult {
         val provider = providerFor(request.capability)
+            ?: return AiResult.Failure(AiError.ProviderNotConfigured)
+
+        if (!provider.supports(request.capability)) {
+            return AiResult.Failure(AiError.UnsupportedCapability(request.capability))
+        }
+
+        return provider.execute(request)
+    }
+
+    suspend fun execute(providerId: AiProviderId, request: AiRequest): AiResult {
+        val provider = providerFor(providerId, request.capability)
             ?: return AiResult.Failure(AiError.ProviderNotConfigured)
 
         if (!provider.supports(request.capability)) {
@@ -74,6 +88,7 @@ data class AiClassificationInput(
     val sender: String? = null,
     val subject: String? = null,
     val preview: String? = null,
+    val fullMessage: String? = null,
     val existingCategories: Set<AiClassificationCategory> = emptySet(),
 )
 
@@ -100,6 +115,8 @@ data class AiResultMetadata(
 )
 
 sealed interface AiError {
+    data object Disabled : AiError
+    data object AccountNotAllowed : AiError
     data object ProviderNotConfigured : AiError
     data object Authentication : AiError
     data object Network : AiError
