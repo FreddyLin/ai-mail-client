@@ -15,6 +15,7 @@ import net.thunderbird.android.widget.widgetModule
 import net.thunderbird.app.common.appCommonModule
 import net.thunderbird.core.common.oauth.OAuthConfigurationFactory
 import net.thunderbird.feature.ai.internal.featureAiModule
+import net.thunderbird.feature.ai.provider.openai.openAiProviderModule
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
@@ -22,6 +23,7 @@ val appModule = module {
     includes(thunderbirdFeatureFlagModule)
     includes(appCommonModule)
     includes(featureAiModule)
+    includes(openAiProviderModule)
 
     includes(widgetModule)
     includes(featureModule)

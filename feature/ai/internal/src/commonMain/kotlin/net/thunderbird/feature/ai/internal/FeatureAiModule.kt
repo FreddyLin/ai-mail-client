@@ -17,7 +17,7 @@ internal expect val platformFeatureAiCredentialStoreModule: Module
 
 val featureAiModule = module {
     includes(platformFeatureAiCredentialStoreModule)
-    single<AiProviderRegistry> { UnconfiguredAiProviderRegistry() }
+    single<AiProviderRegistry> { DefaultAiProviderRegistry(providers = getAll()) }
     single<CoroutineScope>(named("AiConfigStoreScope")) {
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
     }

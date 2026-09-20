@@ -91,6 +91,7 @@ include(
 include(
     ":feature:ai:api",
     ":feature:ai:internal",
+    ":feature:ai:provider:openai",
 )
 
 include(
