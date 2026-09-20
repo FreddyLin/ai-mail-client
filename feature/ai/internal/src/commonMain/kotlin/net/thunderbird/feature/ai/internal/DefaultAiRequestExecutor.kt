@@ -14,10 +14,19 @@ internal class DefaultAiRequestExecutor(
     override suspend fun execute(accountId: String, request: AiRequest): AiResult {
         return when (val decision = requestPolicy.evaluate(accountId, request)) {
             is AiRequestDecision.Denied -> AiResult.Failure(decision.error)
-            is AiRequestDecision.Allowed -> providerRegistry.execute(
-                providerId = decision.providerConfiguration.providerId,
-                request = decision.request,
-            )
+            is AiRequestDecision.Allowed -> execute(decision)
         }
     }
+
+    override suspend fun testConnection(): AiResult {
+        return when (val decision = requestPolicy.evaluateConnectionTest()) {
+            is AiRequestDecision.Denied -> AiResult.Failure(decision.error)
+            is AiRequestDecision.Allowed -> execute(decision)
+        }
+    }
+
+    private suspend fun execute(decision: AiRequestDecision.Allowed): AiResult = providerRegistry.execute(
+        providerId = decision.providerConfiguration.providerId,
+        request = decision.request,
+    )
 }

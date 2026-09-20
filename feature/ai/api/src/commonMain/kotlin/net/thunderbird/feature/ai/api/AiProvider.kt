@@ -38,8 +38,10 @@ interface AiProviderRegistry {
 
     fun providerFor(capability: AiCapability): AiProvider?
 
+    fun providerFor(providerId: AiProviderId): AiProvider?
+
     fun providerFor(providerId: AiProviderId, capability: AiCapability): AiProvider? =
-        providerFor(capability)?.takeIf { it.id == providerId }
+        providerFor(providerId)?.takeIf { it.supports(capability) }
 
     suspend fun execute(request: AiRequest): AiResult {
         val provider = providerFor(request.capability)

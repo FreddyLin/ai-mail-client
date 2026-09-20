@@ -89,6 +89,9 @@ class AiProviderTest {
         )
 
         override fun providerFor(capability: AiCapability): AiProvider? = provider
+
+        override fun providerFor(providerId: AiProviderId): AiProvider? =
+            provider?.takeIf { it.id == providerId }
     }
 
     private class FakeAiProvider(

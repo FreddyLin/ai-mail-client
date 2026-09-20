@@ -11,8 +11,12 @@ sealed interface AiRequestDecision {
 
 interface AiRequestPolicy {
     suspend fun evaluate(accountId: String, request: AiRequest): AiRequestDecision
+
+    suspend fun evaluateConnectionTest(): AiRequestDecision
 }
 
 interface AiRequestExecutor {
     suspend fun execute(accountId: String, request: AiRequest): AiResult
+
+    suspend fun testConnection(): AiResult
 }

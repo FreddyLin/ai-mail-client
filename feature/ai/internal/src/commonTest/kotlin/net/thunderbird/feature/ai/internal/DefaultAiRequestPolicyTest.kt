@@ -47,11 +47,12 @@ class DefaultAiRequestPolicyTest {
         val testSubject = createPolicy(enabledSettings(AiAccountPolicy(true, AiDataAccessLevel.METADATA_ONLY)))
 
         val result = assertIs<AiRequestDecision.Allowed>(testSubject.evaluate(ACCOUNT_ID, request()))
+        val input = assertIs<AiRequest.Classification>(result.request).input
 
-        assertEquals("sender", (result.request as AiRequest.Classification).input.sender)
-        assertEquals("subject", result.request.input.subject)
-        assertEquals(null, result.request.input.preview)
-        assertEquals(null, result.request.input.fullMessage)
+        assertEquals("sender", input.sender)
+        assertEquals("subject", input.subject)
+        assertEquals(null, input.preview)
+        assertEquals(null, input.fullMessage)
     }
 
     @Test
@@ -72,7 +73,7 @@ class DefaultAiRequestPolicyTest {
         val result = assertIs<AiRequestDecision.Allowed>(testSubject.evaluate(ACCOUNT_ID, request()))
         val input = (result.request as AiRequest.Classification).input
 
-        assertEquals("preview", input.preview)
+        assertEquals("preview".repeat(1_000), input.preview)
         assertEquals("full message", input.fullMessage)
     }
 
@@ -115,9 +116,124 @@ class DefaultAiRequestPolicyTest {
         assertEquals(configuration, result.providerConfiguration)
     }
 
+    @Test
+    fun `connection test is denied when global AI is disabled`() = runTest {
+        val result = createPolicy(AiSettings()).evaluateConnectionTest()
+
+        assertEquals(AiRequestDecision.Denied(AiError.Disabled), result)
+    }
+
+    @Test
+    fun `connection test is denied when provider is not configured`() = runTest {
+        val result = createPolicy(AiSettings(enabled = true)).evaluateConnectionTest()
+
+        assertEquals(AiRequestDecision.Denied(AiError.ProviderNotConfigured), result)
+    }
+
+    @Test
+    fun `connection test is denied when configured provider is not available`() = runTest {
+        val settings = AiSettings(
+            enabled = true,
+            providerConfiguration = AiProviderConfiguration(AiProviderId("fake"), AiModelId("model")),
+        )
+
+        val result = createPolicy(settings = settings, provider = null).evaluateConnectionTest()
+
+        assertEquals(AiRequestDecision.Denied(AiError.ProviderNotConfigured), result)
+    }
+
+    @Test
+    fun `connection test is denied when classification is not supported`() = runTest {
+        val settings = AiSettings(
+            enabled = true,
+            providerConfiguration = AiProviderConfiguration(AiProviderId("fake"), AiModelId("model")),
+        )
+        val testSubject = DefaultAiRequestPolicy(
+            settingsRepository = InMemoryAiSettingsRepository(settings),
+            providerRegistry = DefaultAiProviderRegistry(
+                providers = listOf(FakeProvider(capabilities = emptySet())),
+            ),
+        )
+
+        val result = testSubject.evaluateConnectionTest()
+
+        assertEquals(
+            AiRequestDecision.Denied(AiError.UnsupportedCapability(AiCapability.CLASSIFICATION)),
+            result,
+        )
+    }
+
+    @Test
+    fun `connection test does not require an account policy`() = runTest {
+        val configuration = AiProviderConfiguration(AiProviderId("fake"), AiModelId("model"))
+        val settings = AiSettings(
+            enabled = true,
+            providerConfiguration = configuration,
+        )
+
+        val result = assertIs<AiRequestDecision.Allowed>(
+            createPolicy(settings).evaluateConnectionTest(),
+        )
+
+        assertEquals(configuration, result.providerConfiguration)
+    }
+
+    @Test
+    fun `connection test uses only fixed synthetic classification data`() = runTest {
+        val settings = AiSettings(
+            enabled = true,
+            providerConfiguration = AiProviderConfiguration(AiProviderId("fake"), AiModelId("model")),
+        )
+
+        val result = assertIs<AiRequestDecision.Allowed>(
+            createPolicy(settings).evaluateConnectionTest(),
+        )
+        val input = assertIs<AiRequest.Classification>(result.request).input
+
+        assertEquals("newsletter@example.com", input.sender)
+        assertEquals("September product news", input.subject)
+        assertEquals("Discover our latest product updates and new features.", input.preview)
+        assertEquals(null, input.fullMessage)
+        assertEquals(emptySet(), input.existingCategories)
+    }
+
+    @Test
+    fun `unknown account remains denied for normal requests`() = runTest {
+        val testSubject = createPolicy(enabledSettings(AiAccountPolicy(enabled = true)))
+
+        val result = testSubject.evaluate("unknown-account", request())
+
+        assertEquals(AiRequestDecision.Denied(AiError.AccountNotAllowed), result)
+    }
+
+    @Test
+    fun `connection test executor sends the policy request through the provider registry`() = runTest {
+        val provider = FakeProvider(setOf(AiCapability.CLASSIFICATION))
+        val registry = FakeProviderRegistry(provider)
+        val settings = AiSettings(
+            enabled = true,
+            providerConfiguration = AiProviderConfiguration(provider.id, AiModelId("model")),
+        )
+        val policy = DefaultAiRequestPolicy(
+            settingsRepository = InMemoryAiSettingsRepository(settings),
+            providerRegistry = registry,
+        )
+        val testSubject = DefaultAiRequestExecutor(
+            requestPolicy = policy,
+            providerRegistry = registry,
+        )
+
+        testSubject.testConnection()
+
+        val input = assertIs<AiRequest.Classification>(provider.executedRequest).input
+        assertEquals("newsletter@example.com", input.sender)
+        assertEquals("September product news", input.subject)
+        assertEquals("Discover our latest product updates and new features.", input.preview)
+    }
+
     private fun createPolicy(
         settings: AiSettings,
-        provider: FakeProvider = FakeProvider(setOf(AiCapability.CLASSIFICATION)),
+        provider: FakeProvider? = FakeProvider(setOf(AiCapability.CLASSIFICATION)),
     ): DefaultAiRequestPolicy = DefaultAiRequestPolicy(
         settingsRepository = InMemoryAiSettingsRepository(settings),
         providerRegistry = FakeProviderRegistry(provider),
@@ -147,14 +263,18 @@ class DefaultAiRequestPolicyTest {
         override suspend fun updateAccountPolicy(accountId: String, policy: AiAccountPolicy) = Unit
     }
 
-    private class FakeProviderRegistry(private val provider: FakeProvider) : AiProviderRegistry {
+    private class FakeProviderRegistry(private val provider: FakeProvider?) : AiProviderRegistry {
         override val availability = AiProviderAvailability(
-            enabled = true,
-            providerId = provider.id,
-            capabilities = provider.capabilities,
+            enabled = provider != null,
+            providerId = provider?.id,
+            capabilities = provider?.capabilities.orEmpty(),
         )
 
-        override fun providerFor(capability: AiCapability): AiProvider? = provider
+        override fun providerFor(capability: AiCapability): AiProvider? =
+            provider?.takeIf { it.supports(capability) }
+
+        override fun providerFor(providerId: AiProviderId): AiProvider? =
+            provider?.takeIf { it.id == providerId }
     }
 
     private class FakeProvider(
@@ -162,8 +282,12 @@ class DefaultAiRequestPolicyTest {
     ) : AiProvider {
         override val id = AiProviderId("fake")
         override val modelId = AiModelId("model")
+        var executedRequest: AiRequest? = null
 
-        override suspend fun execute(request: AiRequest): AiResult = error("Not needed for policy tests")
+        override suspend fun execute(request: AiRequest): AiResult {
+            executedRequest = request
+            return AiResult.Failure(AiError.Unknown)
+        }
     }
 
     private companion object {

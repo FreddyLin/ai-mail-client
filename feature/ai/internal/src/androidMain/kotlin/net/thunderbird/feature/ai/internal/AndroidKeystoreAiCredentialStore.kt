@@ -13,11 +13,14 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import net.thunderbird.feature.ai.api.AiCredential
+import net.thunderbird.feature.ai.api.AiCredentialOperationResult
+import net.thunderbird.feature.ai.api.AiCredentialStatus
 import net.thunderbird.feature.ai.api.AiCredentialStore
 import net.thunderbird.feature.ai.api.AiProviderId
 
 internal class AndroidKeystoreAiCredentialStore(
     context: Context,
+    private val credentialCipher: AiCredentialCipher = AndroidKeystoreAiCredentialCipher(),
 ) : AiCredentialStore {
     private val credentialDirectory = File(context.noBackupFilesDir, CREDENTIAL_DIRECTORY)
     private val lock = Any()
@@ -26,41 +29,48 @@ internal class AndroidKeystoreAiCredentialStore(
         runCatching { readCredential(providerId) }.getOrNull()
     }
 
-    override suspend fun write(providerId: AiProviderId, credential: AiCredential) {
-        synchronized(lock) {
-            runCatching { writeCredential(providerId, credential) }
-        }
+    override suspend fun status(providerId: AiProviderId): AiCredentialStatus = synchronized(lock) {
+        val file = credentialFile(providerId)
+        if (!file.isFile) return@synchronized AiCredentialStatus.Missing
+
+        runCatching { readCredential(providerId) }
+            .fold(
+                onSuccess = { credential ->
+                    if (credential != null) AiCredentialStatus.Available else AiCredentialStatus.Unavailable
+                },
+                onFailure = { AiCredentialStatus.Unavailable },
+            )
     }
 
-    override suspend fun delete(providerId: AiProviderId) {
-        synchronized(lock) {
-            runCatching { credentialFile(providerId).delete() }
-        }
+    override suspend fun write(
+        providerId: AiProviderId,
+        credential: AiCredential,
+    ): AiCredentialOperationResult = synchronized(lock) {
+        runCatching { writeCredential(providerId, credential) }
+            .fold(
+                onSuccess = { AiCredentialOperationResult.Success },
+                onFailure = { AiCredentialOperationResult.Failure },
+            )
+    }
+
+    override suspend fun delete(providerId: AiProviderId): AiCredentialOperationResult = synchronized(lock) {
+        runCatching { deleteCredential(providerId) }
+            .fold(
+                onSuccess = { AiCredentialOperationResult.Success },
+                onFailure = { AiCredentialOperationResult.Failure },
+            )
     }
 
     private fun readCredential(providerId: AiProviderId): AiCredential? {
         val file = credentialFile(providerId)
         if (!file.isFile) return null
 
-        val payload = file.readBytes()
-        if (payload.size <= IV_SIZE_BYTES) return null
-
-        val iv = payload.copyOfRange(0, IV_SIZE_BYTES)
-        val ciphertext = payload.copyOfRange(IV_SIZE_BYTES, payload.size)
-        val key = existingKey() ?: return null
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_SIZE_BITS, iv))
-
-        return AiCredential(String(cipher.doFinal(ciphertext), UTF_8))
+        val plaintext = credentialCipher.decrypt(file.readBytes()) ?: return null
+        return AiCredential(String(plaintext, UTF_8))
     }
 
     private fun writeCredential(providerId: AiProviderId, credential: AiCredential) {
-        val key = getOrCreateKey()
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, key)
-
-        val encrypted = cipher.doFinal(credential.secret.toByteArray(UTF_8))
-        val payload = cipher.iv + encrypted
+        val payload = credentialCipher.encrypt(credential.secret.toByteArray(UTF_8))
 
         check(credentialDirectory.mkdirs() || credentialDirectory.isDirectory)
         val target = credentialFile(providerId)
@@ -73,11 +83,48 @@ internal class AndroidKeystoreAiCredentialStore(
         }
     }
 
+    private fun deleteCredential(providerId: AiProviderId) {
+        val file = credentialFile(providerId)
+        check(!file.exists() || file.delete())
+    }
+
     private fun credentialFile(providerId: AiProviderId): File {
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(providerId.value.toByteArray(UTF_8))
         val filename = Base64.encodeToString(digest, Base64.URL_SAFE or Base64.NO_WRAP)
         return File(credentialDirectory, filename)
+    }
+
+    private companion object {
+        const val CREDENTIAL_DIRECTORY = "ai-credentials"
+    }
+}
+
+internal interface AiCredentialCipher {
+    fun encrypt(plaintext: ByteArray): ByteArray
+
+    fun decrypt(payload: ByteArray): ByteArray?
+}
+
+private class AndroidKeystoreAiCredentialCipher : AiCredentialCipher {
+    override fun encrypt(plaintext: ByteArray): ByteArray {
+        val key = getOrCreateKey()
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, key)
+
+        return cipher.iv + cipher.doFinal(plaintext)
+    }
+
+    override fun decrypt(payload: ByteArray): ByteArray? {
+        if (payload.size <= IV_SIZE_BYTES) return null
+
+        val iv = payload.copyOfRange(0, IV_SIZE_BYTES)
+        val ciphertext = payload.copyOfRange(IV_SIZE_BYTES, payload.size)
+        val key = existingKey() ?: return null
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_SIZE_BITS, iv))
+
+        return cipher.doFinal(ciphertext)
     }
 
     private fun existingKey(): SecretKey? {
@@ -117,7 +164,6 @@ internal class AndroidKeystoreAiCredentialStore(
 
     private companion object {
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
-        const val CREDENTIAL_DIRECTORY = "ai-credentials"
         const val KEY_ALIAS = "linus-mail-ai-credentials"
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val IV_SIZE_BYTES = 12

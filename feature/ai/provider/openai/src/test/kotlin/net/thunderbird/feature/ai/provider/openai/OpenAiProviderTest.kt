@@ -21,6 +21,8 @@ import net.thunderbird.feature.ai.api.AiAccountPolicy
 import net.thunderbird.feature.ai.api.AiClassificationCategory
 import net.thunderbird.feature.ai.api.AiClassificationInput
 import net.thunderbird.feature.ai.api.AiCredential
+import net.thunderbird.feature.ai.api.AiCredentialOperationResult
+import net.thunderbird.feature.ai.api.AiCredentialStatus
 import net.thunderbird.feature.ai.api.AiCredentialStore
 import net.thunderbird.feature.ai.api.AiError
 import net.thunderbird.feature.ai.api.AiModelId
@@ -245,8 +247,16 @@ class OpenAiProviderTest {
         private val credential: AiCredential?,
     ) : AiCredentialStore {
         override suspend fun read(providerId: AiProviderId): AiCredential? = credential
-        override suspend fun write(providerId: AiProviderId, credential: AiCredential) = Unit
-        override suspend fun delete(providerId: AiProviderId) = Unit
+        override suspend fun status(providerId: AiProviderId): AiCredentialStatus =
+            if (credential == null) AiCredentialStatus.Missing else AiCredentialStatus.Available
+
+        override suspend fun write(
+            providerId: AiProviderId,
+            credential: AiCredential,
+        ): AiCredentialOperationResult = AiCredentialOperationResult.Success
+
+        override suspend fun delete(providerId: AiProviderId): AiCredentialOperationResult =
+            AiCredentialOperationResult.Success
     }
 
     private class FakeAiSettingsRepository(

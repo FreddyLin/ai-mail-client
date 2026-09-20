@@ -18,6 +18,6 @@ internal class DefaultAiProviderRegistry(
     override fun providerFor(capability: AiCapability): AiProvider? =
         providers.firstOrNull { it.supports(capability) }
 
-    override fun providerFor(providerId: AiProviderId, capability: AiCapability): AiProvider? =
-        providers.firstOrNull { it.id == providerId && it.supports(capability) }
+    override fun providerFor(providerId: AiProviderId): AiProvider? =
+        providers.firstOrNull { it.id == providerId }
 }
