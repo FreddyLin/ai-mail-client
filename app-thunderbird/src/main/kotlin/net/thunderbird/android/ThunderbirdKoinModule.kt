@@ -4,6 +4,7 @@ import app.k9mail.feature.widget.shortcut.LauncherShortcutActivity
 import com.fsck.k9.AppConfig
 import com.fsck.k9.DefaultAppConfig
 import com.fsck.k9.activity.MessageCompose
+import net.thunderbird.android.ai.settings.AiSettingsViewModel
 import net.thunderbird.android.auth.TbOAuthConfigurationFactory
 import net.thunderbird.android.dev.developmentModuleAdditions
 import net.thunderbird.android.feature.featureModule
@@ -16,6 +17,7 @@ import net.thunderbird.app.common.appCommonModule
 import net.thunderbird.core.common.oauth.OAuthConfigurationFactory
 import net.thunderbird.feature.ai.internal.featureAiModule
 import net.thunderbird.feature.ai.provider.openai.openAiProviderModule
+import org.koin.core.module.dsl.viewModel
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
@@ -33,6 +35,7 @@ val appModule = module {
     single(named("ClientInfoAppVersion")) { BuildConfig.VERSION_NAME }
     single<AppConfig> { appConfig }
     single<OAuthConfigurationFactory> { TbOAuthConfigurationFactory() }
+    viewModel { AiSettingsViewModel(settingsRepository = get(), credentialStore = get(), requestExecutor = get()) }
 
     developmentModuleAdditions()
 }

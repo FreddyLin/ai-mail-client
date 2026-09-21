@@ -90,6 +90,12 @@
 
             </com.fsck.k9.view.ViewSwitcher>
 
+            <FrameLayout
+                android:id="@+id/linus_mail_navigation_host"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                />
+
         </FrameLayout>
 
     </RelativeLayout>

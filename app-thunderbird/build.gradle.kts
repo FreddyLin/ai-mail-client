@@ -226,6 +226,7 @@ dependencies {
     implementation(projects.core.ui.compose.common)
     implementation(projects.core.ui.legacy.theme2.thunderbird)
     implementation(projects.feature.launcher)
+    implementation(projects.feature.ai.api)
     implementation(projects.feature.ai.internal)
     implementation(projects.feature.ai.provider.openai)
 
@@ -280,6 +281,7 @@ dependencies {
     testImplementation(projects.feature.changelog.internal)
 
     testImplementation(libs.appauth)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 dependencyGuard {

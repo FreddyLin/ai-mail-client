@@ -217,11 +217,11 @@ open class MessageHomeActivity :
     private fun initializeLinusMailNavigation() {
         if (!resources.getBoolean(R.bool.linus_mail_navigation_enabled)) return
 
-        val contentRoot = findViewById<FrameLayout>(android.R.id.content)
-        val mailContent = contentRoot.getChildAt(0) ?: return
+        val navigationRoot = findViewById<FrameLayout>(R.id.linus_mail_navigation_host)
+        val mailContent = findViewById<View>(R.id.container)
         linusMailNavigationHost = LinusMailNavigationHost(
             context = this,
-            root = contentRoot,
+            root = navigationRoot,
             mailContent = mailContent,
         ).also { it.install() }
     }

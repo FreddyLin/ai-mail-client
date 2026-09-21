@@ -98,6 +98,14 @@ class SettingsListFragment : Fragment(), ItemTouchCallback {
                 icon = Icons.Outlined.Settings,
             )
 
+            if (resources.getBoolean(R.bool.linus_mail_ai_settings_enabled)) {
+                addIntent(
+                    text = getString(R.string.linus_mail_ai_settings_title),
+                    icon = Icons.Outlined.Settings,
+                    intent = Intent(ACTION_LINUS_MAIL_AI_SETTINGS).setPackage(requireContext().packageName),
+                )
+            }
+
             addSection(title = getString(R.string.accounts_title)) {
                 val isDraggable = accounts.size > 1
                 for (account in accounts) {
@@ -262,5 +270,9 @@ class SettingsListFragment : Fragment(), ItemTouchCallback {
         val newAccountPosition = newPosition - firstAccountPosition
 
         viewModel.moveAccount(account, newAccountPosition)
+    }
+
+    private companion object {
+        const val ACTION_LINUS_MAIL_AI_SETTINGS = "net.thunderbird.android.action.AI_SETTINGS"
     }
 }

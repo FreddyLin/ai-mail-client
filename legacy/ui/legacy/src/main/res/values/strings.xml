@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="linus_mail_ai_settings_title">KI</string>
     <string name="linus_mail_nav_mail">Mail</string>
     <string name="linus_mail_nav_actions">Aktionen</string>
     <string name="linus_mail_nav_search">Suche</string>

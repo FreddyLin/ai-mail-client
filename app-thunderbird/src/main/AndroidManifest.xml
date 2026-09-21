@@ -13,6 +13,16 @@
         >
 
         <activity
+            android:name=".ai.settings.AiSettingsActivity"
+            android:exported="false"
+            >
+            <intent-filter>
+                <action android:name="net.thunderbird.android.action.AI_SETTINGS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
             android:name="com.fsck.k9.ui.settings.account.OpenPgpAppSelectDialog"
             android:configChanges="locale"
             android:theme="@style/Theme.Thunderbird.DayNight.Dialog.Translucent"

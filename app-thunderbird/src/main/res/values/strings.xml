@@ -2,4 +2,38 @@
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_name" translatable="false">Linus Mail</string>
     <string name="brand_name" translatable="false">Linus Mail</string>
+    <string name="ai_settings_title">KI</string>
+    <string name="ai_settings_enabled">KI verwenden</string>
+    <string name="ai_settings_provider">Provider</string>
+    <string name="ai_settings_provider_openai">OpenAI</string>
+    <string name="ai_settings_model">Modell</string>
+    <string name="ai_settings_model_luna">GPT-5.6 Luna</string>
+    <string name="ai_settings_api_key">API-Key</string>
+    <string name="ai_settings_api_key_missing">Kein API-Key gespeichert</string>
+    <string name="ai_settings_api_key_available">API-Key gespeichert</string>
+    <string name="ai_settings_api_key_unavailable">API-Key kann nicht gelesen werden</string>
+    <string name="ai_settings_api_key_enter">API-Key eingeben</string>
+    <string name="ai_settings_api_key_replace">API-Key ersetzen</string>
+    <string name="ai_settings_api_key_delete">API-Key löschen</string>
+    <string name="ai_settings_api_key_dialog_title">OpenAI API-Key</string>
+    <string name="ai_settings_api_key_dialog_label">API-Key</string>
+    <string name="ai_settings_cancel">Abbrechen</string>
+    <string name="ai_settings_save">Speichern</string>
+    <string name="ai_settings_delete_confirmation_title">API-Key löschen?</string>
+    <string name="ai_settings_delete_confirmation_text">Der gespeicherte OpenAI API-Key wird von diesem Gerät gelöscht.</string>
+    <string name="ai_settings_delete">Löschen</string>
+    <string name="ai_settings_credential_operation_failed">Der API-Key konnte nicht gespeichert oder gelöscht werden.</string>
+    <string name="ai_settings_connection">Verbindung</string>
+    <string name="ai_settings_test_connection">Verbindung testen</string>
+    <string name="ai_settings_connection_success">Verbindung erfolgreich</string>
+    <string name="ai_settings_connection_success_detail">GPT-5.6 Luna ist erreichbar.</string>
+    <string name="ai_settings_error_disabled">KI ist deaktiviert.</string>
+    <string name="ai_settings_error_provider_not_configured">OpenAI ist noch nicht vollständig konfiguriert.</string>
+    <string name="ai_settings_error_missing_credential">Kein OpenAI API-Key gespeichert.</string>
+    <string name="ai_settings_error_authentication">API-Key ungültig oder nicht autorisiert.</string>
+    <string name="ai_settings_error_rate_limited">OpenAI-Limit erreicht. Bitte später erneut versuchen.</string>
+    <string name="ai_settings_error_network">OpenAI ist momentan nicht erreichbar.</string>
+    <string name="ai_settings_error_invalid_response">OpenAI hat eine ungültige Antwort geliefert.</string>
+    <string name="ai_settings_error_unsupported_capability">Der konfigurierte Provider unterstützt diesen Test nicht.</string>
+    <string name="ai_settings_error_connection_failed">Verbindungstest fehlgeschlagen.</string>
 </resources>

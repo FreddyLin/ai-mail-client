@@ -2,4 +2,5 @@
 <resources>
     <bool name="linus_mail_navigation_enabled">true</bool>
     <bool name="linus_mail_inbox_enabled">true</bool>
+    <bool name="linus_mail_ai_settings_enabled">true</bool>
 </resources>
