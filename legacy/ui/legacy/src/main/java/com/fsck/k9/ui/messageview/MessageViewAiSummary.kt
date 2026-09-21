@@ -1,6 +1,5 @@
 package com.fsck.k9.ui.messageview
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.fsck.k9.ui.R
 import net.thunderbird.components.ui.bolt.atom.CircularProgressIndicator
+import net.thunderbird.components.ui.bolt.atom.Surface
 import net.thunderbird.components.ui.bolt.atom.button.ButtonText
 import net.thunderbird.components.ui.bolt.atom.text.TextBodyMedium
 import net.thunderbird.components.ui.bolt.atom.text.TextTitleSmall
@@ -31,63 +31,137 @@ internal fun createAiSummaryPreview(localPreview: String?, readerContent: String
 
 internal sealed interface MessageViewAiSummaryState {
     data object Idle : MessageViewAiSummaryState
-    data object Loading : MessageViewAiSummaryState
-    data class Success(val summary: String) : MessageViewAiSummaryState
-    data class Error(val error: MessageReaderAiSummarizationError) : MessageViewAiSummaryState
+    data class Loading(val previousSummary: String? = null) : MessageViewAiSummaryState
+    data class Success(val summary: String, val isExpanded: Boolean = true) : MessageViewAiSummaryState
+    data class Error(
+        val error: MessageReaderAiSummarizationError,
+        val previousSummary: String? = null,
+    ) : MessageViewAiSummaryState
 }
 
 @Composable
 internal fun MessageViewAiSummary(
     state: MessageViewAiSummaryState,
     onRetry: () -> Unit,
+    onCollapse: () -> Unit,
+    onExpand: () -> Unit,
+    onRegenerate: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (state is MessageViewAiSummaryState.Idle) return
 
-    Column(
+    Surface(
         modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(
-                horizontal = BoltTheme.spacings.double,
-                vertical = BoltTheme.spacings.default,
-            ),
-        verticalArrangement = Arrangement.spacedBy(BoltTheme.spacings.default),
+            .padding(horizontal = BoltTheme.spacings.default),
+        shape = BoltTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = BoltTheme.elevations.level1,
+    ) {
+        Column(
+            modifier = Modifier.padding(BoltTheme.spacings.double),
+            verticalArrangement = Arrangement.spacedBy(BoltTheme.spacings.default),
+        ) {
+            when (state) {
+                MessageViewAiSummaryState.Idle -> Unit
+                is MessageViewAiSummaryState.Loading -> {
+                    SummaryHeader()
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(BoltTheme.spacings.default),
+                    ) {
+                        CircularProgressIndicator()
+                        TextBodyMedium(
+                            text = stringResource(R.string.ai_summarization_loading),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    state.previousSummary?.let { summary ->
+                        SummaryText(summary)
+                    }
+                }
+                is MessageViewAiSummaryState.Success -> {
+                    if (state.isExpanded) {
+                        SummaryHeader()
+                        SummaryText(state.summary)
+                        SummaryActions(
+                            onCollapse = onCollapse,
+                            onRegenerate = onRegenerate,
+                        )
+                    } else {
+                        CollapsedSummary(onExpand = onExpand)
+                    }
+                }
+                is MessageViewAiSummaryState.Error -> {
+                    SummaryHeader()
+                    state.previousSummary?.let { summary ->
+                        SummaryText(summary)
+                    }
+                    TextBodyMedium(
+                        text = errorMessage(state.error),
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    ButtonText(
+                        text = stringResource(R.string.ai_summarization_retry),
+                        onClick = onRetry,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SummaryHeader() {
+    TextTitleSmall(
+        text = stringResource(R.string.ai_summarization_title),
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+}
+
+@Composable
+private fun SummaryText(summary: String) {
+    TextBodyMedium(
+        text = summary,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+}
+
+@Composable
+private fun SummaryActions(
+    onCollapse: () -> Unit,
+    onRegenerate: () -> Unit,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(BoltTheme.spacings.default),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ButtonText(
+            text = stringResource(R.string.ai_summarization_collapse),
+            onClick = onCollapse,
+        )
+        ButtonText(
+            text = stringResource(R.string.ai_summarization_regenerate),
+            onClick = onRegenerate,
+        )
+    }
+}
+
+@Composable
+private fun CollapsedSummary(onExpand: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         TextTitleSmall(
             text = stringResource(R.string.ai_summarization_title),
             color = MaterialTheme.colorScheme.onSurface,
         )
-
-        when (state) {
-            MessageViewAiSummaryState.Idle -> Unit
-            MessageViewAiSummaryState.Loading -> {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(BoltTheme.spacings.default),
-                ) {
-                    CircularProgressIndicator()
-                    TextBodyMedium(
-                        text = stringResource(R.string.ai_summarization_loading),
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-            }
-            is MessageViewAiSummaryState.Success -> TextBodyMedium(
-                text = state.summary,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            is MessageViewAiSummaryState.Error -> {
-                TextBodyMedium(
-                    text = errorMessage(state.error),
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                ButtonText(
-                    text = stringResource(R.string.ai_summarization_retry),
-                    onClick = onRetry,
-                )
-            }
-        }
+        ButtonText(
+            text = stringResource(R.string.ai_summarization_expand),
+            onClick = onExpand,
+        )
     }
 }
 

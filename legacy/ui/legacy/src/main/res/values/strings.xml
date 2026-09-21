@@ -124,8 +124,11 @@
     <string name="ai_classification_error_assignment_failed">Die Kategorie konnte nicht gespeichert werden.</string>
     <string name="ai_summarization_action">KI-Zusammenfassung</string>
     <string name="ai_summarization_title">KI-Zusammenfassung</string>
-    <string name="ai_summarization_loading">Nachricht wird zusammengefasst ...</string>
+    <string name="ai_summarization_loading">Zusammenfassung wird erstellt ...</string>
     <string name="ai_summarization_retry">Erneut versuchen</string>
+    <string name="ai_summarization_collapse">Einklappen</string>
+    <string name="ai_summarization_expand">Anzeigen</string>
+    <string name="ai_summarization_regenerate">Neu generieren</string>
     <string name="ai_summarization_error_insufficient_data_access">Für dieses Konto ist keine ausreichende Datenfreigabe aktiviert.</string>
     <string name="ai_summarization_error_unknown">KI-Zusammenfassung fehlgeschlagen.</string>
     <string name="print_message_action">Print</string>

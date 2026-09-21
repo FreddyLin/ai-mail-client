@@ -271,7 +271,10 @@ class MessageViewFragment :
                     val summaryState by aiSummaryState.collectAsState()
                     MessageViewAiSummary(
                         state = summaryState,
-                        onRetry = ::onSummarizeWithAi,
+                        onRetry = ::startAiSummaryRequest,
+                        onCollapse = ::collapseAiSummary,
+                        onExpand = ::expandAiSummary,
+                        onRegenerate = ::startAiSummaryRequest,
                     )
                 }
             }
@@ -586,10 +589,40 @@ class MessageViewFragment :
     }
 
     private fun onSummarizeWithAi() {
+        when (val state = aiSummaryState.value) {
+            MessageViewAiSummaryState.Idle -> startAiSummaryRequest()
+            is MessageViewAiSummaryState.Loading -> Unit
+            is MessageViewAiSummaryState.Success -> {
+                if (!state.isExpanded) expandAiSummary()
+            }
+            is MessageViewAiSummaryState.Error -> {
+                if (state.previousSummary == null) startAiSummaryRequest()
+            }
+        }
+    }
+
+    private fun collapseAiSummary() {
+        aiSummaryState.update { state ->
+            if (state is MessageViewAiSummaryState.Success) state.copy(isExpanded = false) else state
+        }
+    }
+
+    private fun expandAiSummary() {
+        aiSummaryState.update { state ->
+            if (state is MessageViewAiSummaryState.Success) state.copy(isExpanded = true) else state
+        }
+    }
+
+    private fun startAiSummaryRequest() {
         val summarizer = aiSummarizer ?: return
         val loadedMessage = message ?: return
         if (aiSummaryState.value is MessageViewAiSummaryState.Loading) return
 
+        val previousSummary = when (val state = aiSummaryState.value) {
+            is MessageViewAiSummaryState.Success -> state.summary
+            is MessageViewAiSummaryState.Error -> state.previousSummary
+            else -> null
+        }
         val currentMessageIdentity = messageReference.toIdentityString()
         val content = mMessageViewInfo?.text
             ?.let(HtmlConverter::htmlToText)
@@ -597,13 +630,14 @@ class MessageViewFragment :
         val preview = createAiSummaryPreview(loadedMessage.preview, content)
         if (preview == null) {
             aiSummaryState.value = MessageViewAiSummaryState.Error(
-                MessageReaderAiSummarizationError.INSUFFICIENT_DATA_ACCESS,
+                error = MessageReaderAiSummarizationError.INSUFFICIENT_DATA_ACCESS,
+                previousSummary = previousSummary,
             )
             return
         }
 
         aiSummaryJob?.cancel()
-        aiSummaryState.value = MessageViewAiSummaryState.Loading
+        aiSummaryState.value = MessageViewAiSummaryState.Loading(previousSummary)
         aiSummaryJob = viewLifecycleOwner.lifecycleScope.launch {
             val sender = loadedMessage.from?.let { addresses ->
                 Address.toString(addresses).takeIf { it.isNotBlank() }
@@ -624,7 +658,10 @@ class MessageViewFragment :
                     MessageViewAiSummaryState.Success(result.summary)
                 }
                 is MessageReaderAiSummarizationResult.Failure -> {
-                    MessageViewAiSummaryState.Error(result.error)
+                    MessageViewAiSummaryState.Error(
+                        error = result.error,
+                        previousSummary = previousSummary,
+                    )
                 }
             }
         }

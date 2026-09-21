@@ -3,6 +3,7 @@ package com.fsck.k9.ui.messageview
 import assertk.assertThat
 import assertk.assertions.isEqualTo
 import kotlin.test.Test
+import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiSummarizationError
 
 class MessageViewAiSummaryTest {
     @Test
@@ -26,5 +27,26 @@ class MessageViewAiSummaryTest {
         val result = createAiSummaryPreview(" ", "")
 
         assertThat(result).isEqualTo(null)
+    }
+
+    @Test
+    fun `successful summary starts expanded and can be collapsed without changing text`() {
+        val state = MessageViewAiSummaryState.Success("Zusammenfassung")
+
+        assertThat(state.isExpanded).isEqualTo(true)
+        assertThat(state.copy(isExpanded = false).summary).isEqualTo("Zusammenfassung")
+    }
+
+    @Test
+    fun `loading and error states retain the previous summary`() {
+        val summary = "Vorherige Zusammenfassung"
+
+        assertThat(MessageViewAiSummaryState.Loading(summary).previousSummary).isEqualTo(summary)
+        assertThat(
+            MessageViewAiSummaryState.Error(
+                error = MessageReaderAiSummarizationError.NETWORK,
+                previousSummary = summary,
+            ).previousSummary,
+        ).isEqualTo(summary)
     }
 }
