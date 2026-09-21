@@ -55,6 +55,7 @@ import com.fsck.k9.helper.UnsubscribeUri
 import com.fsck.k9.mail.Message
 import com.fsck.k9.mail.Part
 import com.fsck.k9.mail.Address
+import com.fsck.k9.message.html.HtmlConverter
 import com.fsck.k9.mailstore.AttachmentViewInfo
 import com.fsck.k9.mailstore.LocalMessage
 import com.fsck.k9.mailstore.MessageViewInfo
@@ -74,6 +75,7 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -108,6 +110,10 @@ import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiCategor
 import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiCategoryAssigner
 import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiCategoryAssignmentResult
 import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiError
+import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiSummarizationError
+import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiSummarizationInput
+import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiSummarizationResult
+import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiSummarizer
 import net.thunderbird.legacy.logging.Log
 import org.koin.android.ext.android.inject
 import org.koin.android.ext.android.getKoin
@@ -139,6 +145,7 @@ class MessageViewFragment :
     private val replayAllStrategy: ReplyActionStrategy<LegacyAccountDto, Message> by inject()
     private val aiClassifier: MessageReaderAiClassifier? by lazy { getKoin().getOrNull() }
     private val aiCategoryAssigner: MessageReaderAiCategoryAssigner? by lazy { getKoin().getOrNull() }
+    private val aiSummarizer: MessageReaderAiSummarizer? by lazy { getKoin().getOrNull() }
 
     private val createDocumentLauncher: ActivityResultLauncher<CreateDocumentResultContract.Input> =
         registerForActivityResult(CreateDocumentResultContract()) { documentUri ->
@@ -192,6 +199,8 @@ class MessageViewFragment :
 
     private val attachmentListBottomSheetState = MutableStateFlow(persistentListOf<AttachmentListItemModel>())
     private val aiClassificationState = MutableStateFlow<MessageReaderAiClassificationResult?>(null)
+    private val aiSummaryState = MutableStateFlow<MessageViewAiSummaryState>(MessageViewAiSummaryState.Idle)
+    private var aiSummaryJob: Job? = null
 
     private val interactionSettings: InteractionSettings
         get() = generalSettingsManager.getConfig().interaction
@@ -254,6 +263,20 @@ class MessageViewFragment :
         messageTopView.setShowAccountIndicator(showAccountIndicator)
 
         val sizeFormatter = SizeFormatter(resources)
+        val summaryComposeView = messageTopView.findViewById<ComposeView>(R.id.ai_summary_compose_view)
+        summaryComposeView.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                themeProvider.WithTheme(darkTheme = themeManager.messageViewTheme === Theme.DARK) {
+                    val summaryState by aiSummaryState.collectAsState()
+                    MessageViewAiSummary(
+                        state = summaryState,
+                        onRetry = ::onSummarizeWithAi,
+                    )
+                }
+            }
+        }
+
         val composeView = messageTopView.findViewById<ComposeView>(R.id.bottom_sheet_compose_view)
         composeView.apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
@@ -479,6 +502,7 @@ class MessageViewFragment :
         menu.findItem(R.id.print)?.isVisible = true
         menu.findItem(R.id.view_compose).isVisible = true
         menu.findItem(R.id.classify_with_ai).isVisible = aiClassifier != null
+        menu.findItem(R.id.summarize_with_ai).isVisible = aiSummarizer != null
 
         val toggleTheme = menu.findItem(R.id.toggle_message_view_theme)
         if (generalSettingsManager.getConfig().display.coreSettings.fixedMessageViewTheme) {
@@ -532,6 +556,7 @@ class MessageViewFragment :
             R.id.set_format_html -> onDisplayHTML()
             R.id.view_compose -> MessageActions.actionCompose(requireActivity(), account)
             R.id.classify_with_ai -> onClassifyWithAi()
+            R.id.summarize_with_ai -> onSummarizeWithAi()
             else -> return false
         }
 
@@ -557,6 +582,51 @@ class MessageViewFragment :
                 ),
             )
             aiClassificationState.value = result
+        }
+    }
+
+    private fun onSummarizeWithAi() {
+        val summarizer = aiSummarizer ?: return
+        val loadedMessage = message ?: return
+        if (aiSummaryState.value is MessageViewAiSummaryState.Loading) return
+
+        val currentMessageIdentity = messageReference.toIdentityString()
+        val content = mMessageViewInfo?.text
+            ?.let(HtmlConverter::htmlToText)
+            ?.takeIf { it.isNotBlank() }
+        val preview = createAiSummaryPreview(loadedMessage.preview, content)
+        if (preview == null) {
+            aiSummaryState.value = MessageViewAiSummaryState.Error(
+                MessageReaderAiSummarizationError.INSUFFICIENT_DATA_ACCESS,
+            )
+            return
+        }
+
+        aiSummaryJob?.cancel()
+        aiSummaryState.value = MessageViewAiSummaryState.Loading
+        aiSummaryJob = viewLifecycleOwner.lifecycleScope.launch {
+            val sender = loadedMessage.from?.let { addresses ->
+                Address.toString(addresses).takeIf { it.isNotBlank() }
+            }
+            val result = summarizer.summarize(
+                accountId = messageReference.accountUuid,
+                input = MessageReaderAiSummarizationInput(
+                    sender = sender,
+                    subject = loadedMessage.subject,
+                    preview = preview,
+                    content = content,
+                ),
+            )
+
+            if (currentMessageIdentity != messageReference.toIdentityString()) return@launch
+            aiSummaryState.value = when (result) {
+                is MessageReaderAiSummarizationResult.Success -> {
+                    MessageViewAiSummaryState.Success(result.summary)
+                }
+                is MessageReaderAiSummarizationResult.Failure -> {
+                    MessageViewAiSummaryState.Error(result.error)
+                }
+            }
         }
     }
 
@@ -1226,6 +1296,9 @@ class MessageViewFragment :
 
     private val messageLoaderCallbacks: MessageLoaderCallbacks = object : MessageLoaderCallbacks {
         override fun onMessageDataLoadFinished(message: LocalMessage) {
+            aiSummaryJob?.cancel()
+            aiSummaryJob = null
+            aiSummaryState.value = MessageViewAiSummaryState.Idle
             this@MessageViewFragment.message = message
 
             displayHeaderForLoadingMessage(message)

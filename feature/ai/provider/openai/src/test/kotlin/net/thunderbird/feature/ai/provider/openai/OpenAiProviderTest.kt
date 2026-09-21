@@ -116,6 +116,8 @@ class OpenAiProviderTest {
         assertTrue(body.contains("Subject"))
         assertTrue(body.contains("Preview"))
         assertTrue(body.contains("Content"))
+        assertTrue(body.contains("immer auf Deutsch"))
+        assertTrue(body.contains("2 bis 3 kurzen"))
         assertFalse(body.contains("test-secret"))
     }
 

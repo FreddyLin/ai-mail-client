@@ -59,6 +59,12 @@ the 'message view theme' setting).
                 android:layout_height="8dp"
                 />
 
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/ai_summary_compose_view"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                />
+
             <com.fsck.k9.view.ToolableViewAnimator
                 android:id="@+id/message_layout_animator"
                 android:layout_width="match_parent"

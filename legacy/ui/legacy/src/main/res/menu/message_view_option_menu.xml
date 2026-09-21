@@ -134,4 +134,10 @@
         app:showAsAction="never"
         />
 
+    <item
+        android:id="@+id/summarize_with_ai"
+        android:title="@string/ai_summarization_action"
+        app:showAsAction="never"
+        />
+
 </menu>

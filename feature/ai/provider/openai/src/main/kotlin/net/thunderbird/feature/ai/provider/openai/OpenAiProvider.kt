@@ -124,9 +124,9 @@ internal class OpenAiProvider(
     }
 
     private fun summarizationPrompt(input: AiSummarizationInput): String = buildString {
-        appendLine("Summarize this email in 2 to 3 short, factual sentences.")
-        appendLine("Do not invent information, add opinions, recommendations, or internal reasoning.")
-        appendLine("Use the language of the email when possible. Return structured JSON only.")
+        appendLine("Fasse diese E-Mail immer auf Deutsch in 2 bis 3 kurzen, sachlichen Sätzen zusammen.")
+        appendLine("Priorisiere die wichtigsten Informationen. Erfinde nichts und füge keine Bewertung, Empfehlung oder internen Überlegungen hinzu.")
+        appendLine("Verwende keine Markdown-Formatierung. Gib ausschließlich strukturiertes JSON zurück.")
         appendLine("Sender: ${input.sender.orEmpty()}")
         appendLine("Subject: ${input.subject.orEmpty()}")
         appendLine("Preview: ${input.preview.orEmpty()}")
@@ -283,7 +283,7 @@ internal class OpenAiProvider(
         const val CLASSIFICATION_INSTRUCTIONS =
             "Classify email. Use only the allowed categories. Return structured JSON only."
         const val SUMMARIZATION_INSTRUCTIONS =
-            "Summarize email briefly and factually. Do not invent information. Return structured JSON only."
+            "Fasse die E-Mail immer auf Deutsch kurz und sachlich zusammen. Erfinde nichts. Gib ausschließlich strukturiertes JSON zurück."
         const val MAX_SUMMARY_LENGTH = 1_000
         val json = Json { ignoreUnknownKeys = true }
     }
