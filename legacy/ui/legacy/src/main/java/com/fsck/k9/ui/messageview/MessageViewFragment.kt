@@ -54,6 +54,7 @@ import com.fsck.k9.helper.MailtoUnsubscribeUri
 import com.fsck.k9.helper.UnsubscribeUri
 import com.fsck.k9.mail.Message
 import com.fsck.k9.mail.Part
+import com.fsck.k9.mail.Address
 import com.fsck.k9.mailstore.AttachmentViewInfo
 import com.fsck.k9.mailstore.LocalMessage
 import com.fsck.k9.mailstore.MessageViewInfo
@@ -100,8 +101,12 @@ import net.thunderbird.feature.mail.message.reader.api.ui.MessageReaderViewContr
 import net.thunderbird.feature.mail.message.reader.api.ui.MessageReaderViewContract.Effect
 import net.thunderbird.feature.mail.message.reader.api.ui.MessageReaderViewContract.Event
 import net.thunderbird.feature.mail.message.reader.api.ui.bridge.MessageReaderBottomSheet
+import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiClassificationInput
+import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiClassificationResult
+import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiClassifier
 import net.thunderbird.legacy.logging.Log
 import org.koin.android.ext.android.inject
+import org.koin.android.ext.android.getKoin
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.koin.compose.koinInject
 import org.openintents.openpgp.util.OpenPgpIntentStarter
@@ -128,6 +133,7 @@ class MessageViewFragment :
     private val messageReaderViewModel: MessageReaderViewContract.ViewModel<Part> by viewModel()
     private val logger: Logger by inject()
     private val replayAllStrategy: ReplyActionStrategy<LegacyAccountDto, Message> by inject()
+    private val aiClassifier: MessageReaderAiClassifier? by lazy { getKoin().getOrNull() }
 
     private val createDocumentLauncher: ActivityResultLauncher<CreateDocumentResultContract.Input> =
         registerForActivityResult(CreateDocumentResultContract()) { documentUri ->
@@ -180,6 +186,7 @@ class MessageViewFragment :
     private var isActive: Boolean = false
 
     private val attachmentListBottomSheetState = MutableStateFlow(persistentListOf<AttachmentListItemModel>())
+    private val aiClassificationState = MutableStateFlow<MessageReaderAiClassificationResult?>(null)
 
     private val interactionSettings: InteractionSettings
         get() = generalSettingsManager.getConfig().interaction
@@ -281,6 +288,13 @@ class MessageViewFragment :
                             onClick = { action -> dispatch(Event.OnMessageReaderBottomSheetActionClick(action)) },
                             onDismiss = { dispatch(Event.CloseMessageReaderBottomSheet()) },
                             modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    aiClassificationState.collectAsState().value?.let { result ->
+                        MessageViewAiClassificationDialog(
+                            result = result,
+                            onDismiss = { aiClassificationState.value = null },
                         )
                     }
                 }
@@ -458,6 +472,7 @@ class MessageViewFragment :
             featureFlagProvider.provide(GeneratedFeatureFlagKey.MESSAGE_VIEW_ACTION_EXPORT_EML).isEnabled()
         menu.findItem(R.id.print)?.isVisible = true
         menu.findItem(R.id.view_compose).isVisible = true
+        menu.findItem(R.id.classify_with_ai).isVisible = aiClassifier != null
 
         val toggleTheme = menu.findItem(R.id.toggle_message_view_theme)
         if (generalSettingsManager.getConfig().display.coreSettings.fixedMessageViewTheme) {
@@ -510,10 +525,33 @@ class MessageViewFragment :
             R.id.set_format_plain -> onDisplayPlainText()
             R.id.set_format_html -> onDisplayHTML()
             R.id.view_compose -> MessageActions.actionCompose(requireActivity(), account)
+            R.id.classify_with_ai -> onClassifyWithAi()
             else -> return false
         }
 
         return true
+    }
+
+    private fun onClassifyWithAi() {
+        val classifier = aiClassifier ?: return
+        val loadedMessage = message ?: return
+        if (aiClassificationState.value is MessageReaderAiClassificationResult.Loading) return
+
+        aiClassificationState.value = MessageReaderAiClassificationResult.Loading
+        viewLifecycleOwner.lifecycleScope.launch {
+            val sender = loadedMessage.from?.let { addresses ->
+                Address.toString(addresses).takeIf { it.isNotBlank() }
+            }
+            val result = classifier.classify(
+                accountId = messageReference.accountUuid,
+                input = MessageReaderAiClassificationInput(
+                    sender = sender,
+                    subject = loadedMessage.subject,
+                    preview = loadedMessage.preview,
+                ),
+            )
+            aiClassificationState.value = result
+        }
     }
 
     private fun printMessage() {

@@ -128,4 +128,10 @@
         app:showAsAction="ifRoom"
         />
 
+    <item
+        android:id="@+id/classify_with_ai"
+        android:title="@string/ai_classification_action"
+        app:showAsAction="never"
+        />
+
 </menu>

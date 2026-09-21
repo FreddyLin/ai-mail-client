@@ -98,6 +98,25 @@
     <string name="unsubscribe_action">Unsubscribe</string>
     <string name="show_headers_action">Show headers</string>
     <string name="message_view_menu_action_export_eml">Export as EML</string>
+    <string name="ai_classification_action">Mit KI klassifizieren</string>
+    <string name="ai_classification_title">KI-Klassifizierung</string>
+    <string name="ai_classification_category_important">Wichtig</string>
+    <string name="ai_classification_category_action">Aktion</string>
+    <string name="ai_classification_category_invoice">Rechnung</string>
+    <string name="ai_classification_category_order">Bestellung</string>
+    <string name="ai_classification_category_newsletter">Newsletter</string>
+    <string name="ai_classification_close">Schliessen</string>
+    <string name="ai_classification_loading">Nachricht wird klassifiziert ...</string>
+    <string name="ai_classification_error_disabled">KI ist deaktiviert.</string>
+    <string name="ai_classification_error_account_not_allowed">KI ist für dieses Konto nicht aktiviert.</string>
+    <string name="ai_classification_error_provider_not_configured">KI ist noch nicht vollständig konfiguriert.</string>
+    <string name="ai_classification_error_authentication">OpenAI API-Key fehlt oder ist ungültig.</string>
+    <string name="ai_classification_error_network">OpenAI ist momentan nicht erreichbar.</string>
+    <string name="ai_classification_error_rate_limited">OpenAI-Limit erreicht. Bitte später erneut versuchen.</string>
+    <string name="ai_classification_error_invalid_response">Die KI-Antwort konnte nicht verarbeitet werden.</string>
+    <string name="ai_classification_error_unsupported_capability">Diese KI-Funktion wird nicht unterstützt.</string>
+    <string name="ai_classification_error_cancelled">KI-Klassifizierung abgebrochen.</string>
+    <string name="ai_classification_error_unknown">KI-Klassifizierung fehlgeschlagen.</string>
     <string name="print_message_action">Print</string>
 
     <string name="set_format_html_action">Use original formatting</string>
