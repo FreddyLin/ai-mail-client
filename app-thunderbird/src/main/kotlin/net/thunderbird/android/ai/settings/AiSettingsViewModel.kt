@@ -7,15 +7,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.thunderbird.core.android.account.LegacyAccountDtoManager
+import net.thunderbird.feature.ai.api.AiAccountPolicy
 import net.thunderbird.feature.ai.api.AiCredential
 import net.thunderbird.feature.ai.api.AiCredentialOperationResult
 import net.thunderbird.feature.ai.api.AiCredentialStatus
 import net.thunderbird.feature.ai.api.AiCredentialStore
+import net.thunderbird.feature.ai.api.AiDataAccessLevel
 import net.thunderbird.feature.ai.api.AiError
 import net.thunderbird.feature.ai.api.AiModelId
 import net.thunderbird.feature.ai.api.AiProviderConfiguration
@@ -32,6 +36,14 @@ internal data class AiSettingsUiState(
     val credentialOperationFailed: Boolean = false,
     val connectionTestInProgress: Boolean = false,
     val connectionTestResult: AiConnectionTestResult? = null,
+    val accounts: List<AiAccountUiState> = emptyList(),
+)
+
+internal data class AiAccountUiState(
+    val accountId: String,
+    val displayName: String,
+    val enabled: Boolean,
+    val dataAccessLevel: AiDataAccessLevel,
 )
 
 internal sealed interface AiConnectionTestResult {
@@ -47,6 +59,7 @@ internal class AiSettingsViewModel(
     private val settingsRepository: AiSettingsRepository,
     private val credentialStore: AiCredentialStore,
     private val requestExecutor: AiRequestExecutor,
+    private val accountManager: LegacyAccountDtoManager,
     private val ioContext: CoroutineContext = Dispatchers.IO,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(AiSettingsUiState())
@@ -57,16 +70,38 @@ internal class AiSettingsViewModel(
 
     init {
         viewModelScope.launch {
-            settingsRepository.settings.collect { settings ->
+            combine(accountManager.getAccountsFlow(), settingsRepository.settings) {
+                    accounts,
+                    settings,
+                ->
+                settings to accounts.map { account ->
+                    val policy = settings.accountPolicy(account.uuid)
+                    AiAccountUiState(
+                        accountId = account.uuid,
+                        displayName = account.displayName,
+                        enabled = policy.enabled,
+                        dataAccessLevel = policy.dataAccessLevel,
+                    )
+                }
+            }.collect { (settings, accounts) ->
                 mutableState.update {
                     it.copy(
                         aiEnabled = settings.enabled,
                         openAiConfigured = settings.providerConfiguration == openAiConfiguration,
+                        accounts = accounts,
                     )
                 }
             }
         }
         refreshCredentialStatus()
+    }
+
+    fun setAccountAiEnabled(accountId: String, enabled: Boolean) {
+        updateAccountPolicy(accountId) { it.copy(enabled = enabled) }
+    }
+
+    fun setAccountDataAccessLevel(accountId: String, dataAccessLevel: AiDataAccessLevel) {
+        updateAccountPolicy(accountId) { it.copy(dataAccessLevel = dataAccessLevel) }
     }
 
     fun setAiEnabled(enabled: Boolean) {
@@ -139,6 +174,16 @@ internal class AiSettingsViewModel(
                 credentialStore.status(openAiProviderId)
             }
             mutableState.update { it.copy(credentialStatus = status) }
+        }
+    }
+
+    private fun updateAccountPolicy(
+        accountId: String,
+        update: (AiAccountPolicy) -> AiAccountPolicy,
+    ) {
+        viewModelScope.launch {
+            val currentPolicy = settingsRepository.settings.first().accountPolicy(accountId)
+            settingsRepository.updateAccountPolicy(accountId, update(currentPolicy))
         }
     }
 

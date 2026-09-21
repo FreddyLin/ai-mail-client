@@ -13,14 +13,21 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import net.thunderbird.components.ui.testing.coroutines.MainDispatcherHelper
+import net.thunderbird.core.android.account.AccountRemovedListener
+import net.thunderbird.core.android.account.AccountsChangeListener
+import net.thunderbird.core.android.account.Identity
+import net.thunderbird.core.android.account.LegacyAccountDto
+import net.thunderbird.core.android.account.LegacyAccountDtoManager
 import net.thunderbird.feature.ai.api.AiAccountPolicy
 import net.thunderbird.feature.ai.api.AiCredential
 import net.thunderbird.feature.ai.api.AiCredentialOperationResult
 import net.thunderbird.feature.ai.api.AiCredentialStatus
 import net.thunderbird.feature.ai.api.AiCredentialStore
+import net.thunderbird.feature.ai.api.AiDataAccessLevel
 import net.thunderbird.feature.ai.api.AiError
 import net.thunderbird.feature.ai.api.AiModelId
 import net.thunderbird.feature.ai.api.AiProviderConfiguration
@@ -57,6 +64,79 @@ class AiSettingsViewModelTest {
         assertThat(testSubject.state.value.aiEnabled).isTrue()
         assertThat(testSubject.state.value.openAiConfigured).isTrue()
         assertThat(executor.testConnectionCalls).isEqualTo(0)
+    }
+
+    @Test
+    fun `loads configured accounts with privacy safe defaults`() {
+        val account = testAccount()
+        val testSubject = createTestSubject(accountManager = FakeLegacyAccountDtoManager(listOf(account)))
+
+        assertThat(testSubject.state.value.accounts).isEqualTo(
+            listOf(
+                AiAccountUiState(
+                    accountId = account.uuid,
+                    displayName = account.displayName,
+                    enabled = false,
+                    dataAccessLevel = AiDataAccessLevel.METADATA_ONLY,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `changing account enabled preserves data access level`() {
+        val accountId = "account-id"
+        val repository = FakeAiSettingsRepository(
+            AiSettings(
+                accountPolicies = mapOf(
+                    accountId to AiAccountPolicy(
+                        enabled = false,
+                        dataAccessLevel = AiDataAccessLevel.PREVIEW,
+                    ),
+                ),
+            ),
+        )
+        val testSubject = createTestSubject(settingsRepository = repository)
+
+        testSubject.setAccountAiEnabled(accountId, enabled = true)
+
+        assertThat(repository.current.value.accountPolicy(accountId)).isEqualTo(
+            AiAccountPolicy(enabled = true, dataAccessLevel = AiDataAccessLevel.PREVIEW),
+        )
+    }
+
+    @Test
+    fun `changing account data access preserves enabled state`() {
+        val accountId = "account-id"
+        val repository = FakeAiSettingsRepository(
+            AiSettings(
+                accountPolicies = mapOf(accountId to AiAccountPolicy(enabled = true)),
+            ),
+        )
+        val testSubject = createTestSubject(settingsRepository = repository)
+
+        testSubject.setAccountDataAccessLevel(accountId, AiDataAccessLevel.FULL_MESSAGE)
+
+        assertThat(repository.current.value.accountPolicy(accountId)).isEqualTo(
+            AiAccountPolicy(enabled = true, dataAccessLevel = AiDataAccessLevel.FULL_MESSAGE),
+        )
+    }
+
+    @Test
+    fun `disabling global AI preserves account policies`() {
+        val accountId = "account-id"
+        val policy = AiAccountPolicy(enabled = true, dataAccessLevel = AiDataAccessLevel.PREVIEW)
+        val repository = FakeAiSettingsRepository(
+            AiSettings(
+                enabled = true,
+                accountPolicies = mapOf(accountId to policy),
+            ),
+        )
+        val testSubject = createTestSubject(settingsRepository = repository)
+
+        testSubject.setAiEnabled(false)
+
+        assertThat(repository.current.value.accountPolicies[accountId]).isEqualTo(policy)
     }
 
     @Test
@@ -190,13 +270,20 @@ class AiSettingsViewModelTest {
         settingsRepository: FakeAiSettingsRepository = FakeAiSettingsRepository(settings),
         credentialStore: FakeAiCredentialStore = FakeAiCredentialStore(),
         requestExecutor: FakeAiRequestExecutor = FakeAiRequestExecutor(),
+        accountManager: LegacyAccountDtoManager = FakeLegacyAccountDtoManager(emptyList()),
     ): AiSettingsViewModel {
         return AiSettingsViewModel(
             settingsRepository = settingsRepository,
             credentialStore = credentialStore,
             requestExecutor = requestExecutor,
+            accountManager = accountManager,
             ioContext = dispatcher,
         )
+    }
+
+    private fun testAccount() = LegacyAccountDto("00000000-0000-0000-0000-000000000001").apply {
+        name = "Max Example"
+        identities = mutableListOf(Identity(email = "max@example.com"))
     }
 }
 
@@ -209,7 +296,33 @@ private class FakeAiSettingsRepository(initial: AiSettings = AiSettings()) : AiS
         current.value = current.value.copy(enabled = enabled, providerConfiguration = providerConfiguration)
     }
 
-    override suspend fun updateAccountPolicy(accountId: String, policy: AiAccountPolicy) = Unit
+    override suspend fun updateAccountPolicy(accountId: String, policy: AiAccountPolicy) {
+        current.value = current.value.copy(
+            accountPolicies = current.value.accountPolicies + (accountId to policy),
+        )
+    }
+}
+
+private class FakeLegacyAccountDtoManager(
+    private val accounts: List<LegacyAccountDto>,
+) : LegacyAccountDtoManager {
+    override fun getAccounts(): List<LegacyAccountDto> = accounts
+
+    override fun getAccountsFlow(): Flow<List<LegacyAccountDto>> = flowOf(accounts)
+
+    override fun getAccount(accountUuid: String): LegacyAccountDto? = accounts.firstOrNull { it.uuid == accountUuid }
+
+    override fun getAccountFlow(accountUuid: String): Flow<LegacyAccountDto?> = flowOf(getAccount(accountUuid))
+
+    override fun addAccountRemovedListener(listener: AccountRemovedListener) = Unit
+
+    override fun moveAccount(account: LegacyAccountDto, newPosition: Int) = Unit
+
+    override fun addOnAccountsChangeListener(accountsChangeListener: AccountsChangeListener) = Unit
+
+    override fun removeOnAccountsChangeListener(accountsChangeListener: AccountsChangeListener) = Unit
+
+    override fun saveAccount(account: LegacyAccountDto) = Unit
 }
 
 private class FakeAiCredentialStore(

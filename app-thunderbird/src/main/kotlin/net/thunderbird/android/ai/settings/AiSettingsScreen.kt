@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.persistentListOf
 import net.thunderbird.android.R
 import net.thunderbird.components.ui.bolt.atom.CircularProgressIndicator
 import net.thunderbird.components.ui.bolt.atom.DividerHorizontal
@@ -33,11 +34,13 @@ import net.thunderbird.components.ui.bolt.atom.text.TextBodySmall
 import net.thunderbird.components.ui.bolt.atom.text.TextTitleMedium
 import net.thunderbird.components.ui.bolt.atom.text.TextTitleSmall
 import net.thunderbird.components.ui.bolt.atom.textfield.TextFieldOutlinedPassword
+import net.thunderbird.components.ui.bolt.atom.textfield.TextFieldOutlinedSelect
 import net.thunderbird.components.ui.bolt.organism.AlertDialog
 import net.thunderbird.components.ui.bolt.organism.TopAppBarWithBackButton
 import net.thunderbird.components.ui.bolt.template.Scaffold
 import net.thunderbird.components.ui.bolt.theme.BoltTheme
 import net.thunderbird.feature.ai.api.AiCredentialStatus
+import net.thunderbird.feature.ai.api.AiDataAccessLevel
 import net.thunderbird.feature.ai.api.AiError
 
 @Composable
@@ -50,6 +53,7 @@ internal fun AiSettingsScreen(
     var showCredentialDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var credentialInput by remember { mutableStateOf("") }
+    var pendingFullMessageSelection by remember { mutableStateOf<Pair<String, AiDataAccessLevel>?>(null) }
 
     LaunchedEffect(viewModel) {
         viewModel.effects.collect { effect ->
@@ -96,10 +100,34 @@ internal fun AiSettingsScreen(
         AiSettingsContent(
             state = state,
             onAiEnabledChange = viewModel::setAiEnabled,
+            onAccountAiEnabledChange = viewModel::setAccountAiEnabled,
+            onAccountDataAccessLevelChange = { accountId, level ->
+                val currentLevel = state.accounts.firstOrNull { it.accountId == accountId }?.dataAccessLevel
+                if (level == AiDataAccessLevel.FULL_MESSAGE && currentLevel != AiDataAccessLevel.FULL_MESSAGE) {
+                    pendingFullMessageSelection = accountId to level
+                } else {
+                    viewModel.setAccountDataAccessLevel(accountId, level)
+                }
+            },
             onCredentialClick = { showCredentialDialog = true },
             onDeleteCredentialClick = { showDeleteDialog = true },
             onTestConnectionClick = viewModel::testConnection,
             modifier = Modifier.padding(paddingValues),
+        )
+    }
+
+    pendingFullMessageSelection?.let { (accountId, level) ->
+        AlertDialog(
+            title = stringResource(R.string.ai_settings_full_message_warning_title),
+            text = stringResource(R.string.ai_settings_full_message_warning_text),
+            confirmText = stringResource(R.string.ai_settings_full_message_warning_confirm),
+            dismissText = stringResource(R.string.ai_settings_cancel),
+            onConfirmClick = {
+                pendingFullMessageSelection = null
+                viewModel.setAccountDataAccessLevel(accountId, level)
+            },
+            onDismissClick = { pendingFullMessageSelection = null },
+            onDismissRequest = { pendingFullMessageSelection = null },
         )
     }
 }
@@ -108,6 +136,8 @@ internal fun AiSettingsScreen(
 private fun AiSettingsContent(
     state: AiSettingsUiState,
     onAiEnabledChange: (Boolean) -> Unit,
+    onAccountAiEnabledChange: (String, Boolean) -> Unit,
+    onAccountDataAccessLevelChange: (String, AiDataAccessLevel) -> Unit,
     onCredentialClick: () -> Unit,
     onDeleteCredentialClick: () -> Unit,
     onTestConnectionClick: () -> Unit,
@@ -150,8 +180,74 @@ private fun AiSettingsContent(
                 onTestConnectionClick = onTestConnectionClick,
             )
         }
+        item {
+            AccountsPrivacySection(
+                accounts = state.accounts,
+                onAiEnabledChange = onAccountAiEnabledChange,
+                onDataAccessLevelChange = onAccountDataAccessLevelChange,
+            )
+        }
     }
 }
+
+@Composable
+private fun AccountsPrivacySection(
+    accounts: List<AiAccountUiState>,
+    onAiEnabledChange: (String, Boolean) -> Unit,
+    onDataAccessLevelChange: (String, AiDataAccessLevel) -> Unit,
+) {
+    SettingsSection(title = stringResource(R.string.ai_settings_accounts_privacy)) {
+        accounts.forEach { account ->
+            AccountPrivacyItem(
+                account = account,
+                onAiEnabledChange = { onAiEnabledChange(account.accountId, it) },
+                onDataAccessLevelChange = { onDataAccessLevelChange(account.accountId, it) },
+            )
+            DividerHorizontal()
+        }
+    }
+}
+
+@Composable
+private fun AccountPrivacyItem(
+    account: AiAccountUiState,
+    onAiEnabledChange: (Boolean) -> Unit,
+    onDataAccessLevelChange: (AiDataAccessLevel) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(BoltTheme.spacings.default)) {
+        val dataAccessLevelLabels = mapOf(
+            AiDataAccessLevel.METADATA_ONLY to stringResource(R.string.ai_settings_data_access_metadata),
+            AiDataAccessLevel.PREVIEW to stringResource(R.string.ai_settings_data_access_preview),
+            AiDataAccessLevel.FULL_MESSAGE to stringResource(R.string.ai_settings_data_access_full_message),
+        )
+        TextTitleMedium(text = account.displayName)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextBodyLarge(text = stringResource(R.string.ai_settings_account_enabled))
+            Switch(checked = account.enabled, onCheckedChange = onAiEnabledChange)
+        }
+        TextFieldOutlinedSelect(
+            options = persistentListOf(*AiDataAccessLevel.entries.toTypedArray()),
+            selectedOption = account.dataAccessLevel,
+            onValueChange = onDataAccessLevelChange,
+            label = stringResource(R.string.ai_settings_data_access),
+            optionToStringTransformation = { dataAccessLevelLabels[it].orEmpty() },
+        )
+        TextBodySmall(text = dataAccessLevelDescription(account.dataAccessLevel))
+    }
+}
+
+@Composable
+private fun dataAccessLevelDescription(level: AiDataAccessLevel): String = stringResource(
+    when (level) {
+        AiDataAccessLevel.METADATA_ONLY -> R.string.ai_settings_data_access_metadata_description
+        AiDataAccessLevel.PREVIEW -> R.string.ai_settings_data_access_preview_description
+        AiDataAccessLevel.FULL_MESSAGE -> R.string.ai_settings_data_access_full_message_description
+    },
+)
 
 @Composable
 private fun AiEnabledItem(

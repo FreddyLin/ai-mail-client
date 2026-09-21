@@ -35,7 +35,14 @@ val appModule = module {
     single(named("ClientInfoAppVersion")) { BuildConfig.VERSION_NAME }
     single<AppConfig> { appConfig }
     single<OAuthConfigurationFactory> { TbOAuthConfigurationFactory() }
-    viewModel { AiSettingsViewModel(settingsRepository = get(), credentialStore = get(), requestExecutor = get()) }
+    viewModel {
+        AiSettingsViewModel(
+            settingsRepository = get(),
+            credentialStore = get(),
+            requestExecutor = get(),
+            accountManager = get(),
+        )
+    }
 
     developmentModuleAdditions()
 }
