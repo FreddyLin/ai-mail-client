@@ -10,6 +10,12 @@ interface SmartCategoryRepository {
 
     fun assignCategory(messageReference: String, category: SmartCategory)
 
+    fun assignCategories(
+        messageReference: String,
+        categories: Set<SmartCategory>,
+        source: SmartCategoryAssignmentSource,
+    ): Boolean
+
     fun removeCategory(messageReference: String, category: SmartCategory)
 
     fun applyRuleCategories(messageReference: String, categories: Set<SmartCategory>)
@@ -23,6 +29,7 @@ data class SmartCategoryAssignments(
 enum class SmartCategoryAssignmentSource {
     USER,
     RULE,
+    AI,
 }
 
 class SharedPreferencesSmartCategoryRepository(
@@ -58,12 +65,37 @@ class SharedPreferencesSmartCategoryRepository(
         }
     }
 
+    override fun assignCategories(
+        messageReference: String,
+        categories: Set<SmartCategory>,
+        source: SmartCategoryAssignmentSource,
+    ): Boolean {
+        val assignableCategories = categories - SmartCategory.ALL
+        if (assignableCategories.isEmpty()) return true
+
+        synchronized(lock) {
+            val current = assignments.value[messageReference] ?: SmartCategoryAssignments()
+            val editor = preferences.edit()
+            assignableCategories.forEach { category ->
+                if (category !in current.assigned) {
+                    editor.putString(keyFor(messageReference, category), source.name)
+                }
+                editor.remove(suppressedKeyFor(messageReference, category))
+            }
+            val success = editor.commit()
+            if (success) assignments.value = readAssignments()
+            return success
+        }
+    }
+
     override fun applyRuleCategories(messageReference: String, categories: Set<SmartCategory>) {
         val ruleCategories = categories - SmartCategory.ALL
         synchronized(lock) {
             val current = assignments.value[messageReference] ?: SmartCategoryAssignments()
             val userCategories = current.assigned
-                .filterValues { it == SmartCategoryAssignmentSource.USER }
+                .filterValues {
+                    it == SmartCategoryAssignmentSource.USER || it == SmartCategoryAssignmentSource.AI
+                }
                 .keys
             val nextRuleCategories = ruleCategories - current.suppressed - userCategories
             val currentRuleCategories = current.assigned

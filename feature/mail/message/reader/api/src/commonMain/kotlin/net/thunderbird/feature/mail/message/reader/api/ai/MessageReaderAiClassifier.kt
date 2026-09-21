@@ -7,6 +7,18 @@ interface MessageReaderAiClassifier {
     ): MessageReaderAiClassificationResult
 }
 
+interface MessageReaderAiCategoryAssigner {
+    suspend fun assign(
+        messageReference: String,
+        categories: Set<MessageReaderAiCategory>,
+    ): MessageReaderAiCategoryAssignmentResult
+}
+
+sealed interface MessageReaderAiCategoryAssignmentResult {
+    data object Success : MessageReaderAiCategoryAssignmentResult
+    data object Failure : MessageReaderAiCategoryAssignmentResult
+}
+
 data class MessageReaderAiClassificationInput(
     val sender: String?,
     val subject: String?,
@@ -15,6 +27,7 @@ data class MessageReaderAiClassificationInput(
 
 sealed interface MessageReaderAiClassificationResult {
     data object Loading : MessageReaderAiClassificationResult
+    data object Saving : MessageReaderAiClassificationResult
 
     data class Success(
         val categories: Set<MessageReaderAiCategory>,
@@ -45,4 +58,5 @@ enum class MessageReaderAiError {
     UNSUPPORTED_CAPABILITY,
     CANCELLED,
     UNKNOWN,
+    ASSIGNMENT_FAILED,
 }

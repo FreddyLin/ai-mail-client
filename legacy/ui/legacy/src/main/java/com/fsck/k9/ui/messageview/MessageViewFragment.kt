@@ -104,6 +104,10 @@ import net.thunderbird.feature.mail.message.reader.api.ui.bridge.MessageReaderBo
 import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiClassificationInput
 import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiClassificationResult
 import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiClassifier
+import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiCategory
+import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiCategoryAssigner
+import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiCategoryAssignmentResult
+import net.thunderbird.feature.mail.message.reader.api.ai.MessageReaderAiError
 import net.thunderbird.legacy.logging.Log
 import org.koin.android.ext.android.inject
 import org.koin.android.ext.android.getKoin
@@ -134,6 +138,7 @@ class MessageViewFragment :
     private val logger: Logger by inject()
     private val replayAllStrategy: ReplyActionStrategy<LegacyAccountDto, Message> by inject()
     private val aiClassifier: MessageReaderAiClassifier? by lazy { getKoin().getOrNull() }
+    private val aiCategoryAssigner: MessageReaderAiCategoryAssigner? by lazy { getKoin().getOrNull() }
 
     private val createDocumentLauncher: ActivityResultLauncher<CreateDocumentResultContract.Input> =
         registerForActivityResult(CreateDocumentResultContract()) { documentUri ->
@@ -295,6 +300,7 @@ class MessageViewFragment :
                         MessageViewAiClassificationDialog(
                             result = result,
                             onDismiss = { aiClassificationState.value = null },
+                            onApply = ::onApplyAiCategories,
                         )
                     }
                 }
@@ -551,6 +557,26 @@ class MessageViewFragment :
                 ),
             )
             aiClassificationState.value = result
+        }
+    }
+
+    private fun onApplyAiCategories(categories: Set<MessageReaderAiCategory>) {
+        val assigner = aiCategoryAssigner ?: return
+        if (aiClassificationState.value !is MessageReaderAiClassificationResult.Success) return
+
+        aiClassificationState.value = MessageReaderAiClassificationResult.Saving
+        viewLifecycleOwner.lifecycleScope.launch {
+            when (assigner.assign(messageReference.toIdentityString(), categories)) {
+                MessageReaderAiCategoryAssignmentResult.Success -> {
+                    aiClassificationState.value = null
+                    Toast.makeText(requireContext(), R.string.ai_classification_saved, Toast.LENGTH_SHORT).show()
+                }
+                MessageReaderAiCategoryAssignmentResult.Failure -> {
+                    aiClassificationState.value = MessageReaderAiClassificationResult.Failure(
+                        MessageReaderAiError.ASSIGNMENT_FAILED,
+                    )
+                }
+            }
         }
     }
 

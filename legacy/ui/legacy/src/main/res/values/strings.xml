@@ -106,7 +106,11 @@
     <string name="ai_classification_category_order">Bestellung</string>
     <string name="ai_classification_category_newsletter">Newsletter</string>
     <string name="ai_classification_close">Schliessen</string>
+    <string name="ai_classification_apply">Übernehmen</string>
+    <string name="ai_classification_cancel">Abbrechen</string>
     <string name="ai_classification_loading">Nachricht wird klassifiziert ...</string>
+    <string name="ai_classification_saving">Kategorie wird übernommen ...</string>
+    <string name="ai_classification_saved">Kategorie übernommen</string>
     <string name="ai_classification_error_disabled">KI ist deaktiviert.</string>
     <string name="ai_classification_error_account_not_allowed">KI ist für dieses Konto nicht aktiviert.</string>
     <string name="ai_classification_error_provider_not_configured">KI ist noch nicht vollständig konfiguriert.</string>
@@ -117,6 +121,7 @@
     <string name="ai_classification_error_unsupported_capability">Diese KI-Funktion wird nicht unterstützt.</string>
     <string name="ai_classification_error_cancelled">KI-Klassifizierung abgebrochen.</string>
     <string name="ai_classification_error_unknown">KI-Klassifizierung fehlgeschlagen.</string>
+    <string name="ai_classification_error_assignment_failed">Die Kategorie konnte nicht gespeichert werden.</string>
     <string name="print_message_action">Print</string>
 
     <string name="set_format_html_action">Use original formatting</string>

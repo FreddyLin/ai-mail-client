@@ -39,6 +39,82 @@ class SmartCategoryRepositoryTest {
         assertTrue(SmartCategory.NEWSLETTER in assignment.suppressed)
     }
 
+    @Test
+    fun `ai confirmation clears suppression only for selected category`() = runBlocking {
+        val messageReference = "account:folder:3"
+        preferences.edit().clear().commit()
+        val testSubject = SharedPreferencesSmartCategoryRepository(context)
+
+        testSubject.applyRuleCategories(messageReference, setOf(SmartCategory.NEWSLETTER, SmartCategory.INVOICE))
+        testSubject.removeCategory(messageReference, SmartCategory.NEWSLETTER)
+        testSubject.removeCategory(messageReference, SmartCategory.INVOICE)
+        testSubject.assignCategories(
+            messageReference,
+            setOf(SmartCategory.NEWSLETTER),
+            SmartCategoryAssignmentSource.AI,
+        )
+
+        val assignment = testSubject.observeAssignments().first().getValue(messageReference)
+        assertEquals(SmartCategoryAssignmentSource.AI, assignment.assigned[SmartCategory.NEWSLETTER])
+        assertTrue(SmartCategory.NEWSLETTER !in assignment.suppressed)
+        assertTrue(SmartCategory.INVOICE in assignment.suppressed)
+    }
+
+    @Test
+    fun `ai assignment is protected from later rule updates`() = runBlocking {
+        val messageReference = "account:folder:4"
+        preferences.edit().clear().commit()
+        val testSubject = SharedPreferencesSmartCategoryRepository(context)
+
+        testSubject.assignCategories(
+            messageReference,
+            setOf(SmartCategory.NEWSLETTER),
+            SmartCategoryAssignmentSource.AI,
+        )
+        testSubject.applyRuleCategories(messageReference, setOf(SmartCategory.INVOICE))
+
+        val assignment = testSubject.observeAssignments().first().getValue(messageReference)
+        assertEquals(SmartCategoryAssignmentSource.AI, assignment.assigned[SmartCategory.NEWSLETTER])
+        assertTrue(SmartCategory.INVOICE !in assignment.assigned)
+    }
+
+    @Test
+    fun `ai assignment does not replace user or rule assignment`() = runBlocking {
+        val messageReference = "account:folder:5"
+        preferences.edit().clear().commit()
+        val testSubject = SharedPreferencesSmartCategoryRepository(context)
+
+        testSubject.assignCategory(messageReference, SmartCategory.IMPORTANT)
+        testSubject.applyRuleCategories(messageReference, setOf(SmartCategory.INVOICE))
+        testSubject.assignCategories(
+            messageReference,
+            setOf(SmartCategory.IMPORTANT, SmartCategory.INVOICE, SmartCategory.ORDER),
+            SmartCategoryAssignmentSource.AI,
+        )
+
+        val assignment = testSubject.observeAssignments().first().getValue(messageReference)
+        assertEquals(SmartCategoryAssignmentSource.USER, assignment.assigned[SmartCategory.IMPORTANT])
+        assertEquals(SmartCategoryAssignmentSource.RULE, assignment.assigned[SmartCategory.INVOICE])
+        assertEquals(SmartCategoryAssignmentSource.AI, assignment.assigned[SmartCategory.ORDER])
+    }
+
+    @Test
+    fun `all is never persisted as an ai category`() = runBlocking {
+        val messageReference = "account:folder:6"
+        preferences.edit().clear().commit()
+        val testSubject = SharedPreferencesSmartCategoryRepository(context)
+
+        assertTrue(
+            testSubject.assignCategories(
+                messageReference,
+                setOf(SmartCategory.ALL),
+                SmartCategoryAssignmentSource.AI,
+            ),
+        )
+
+        assertTrue(testSubject.observeAssignments().first().isEmpty())
+    }
+
     private companion object {
         const val PREFERENCES_NAME = "linus_mail_smart_categories"
     }
