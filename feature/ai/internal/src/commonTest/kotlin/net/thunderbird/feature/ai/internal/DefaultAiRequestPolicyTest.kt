@@ -19,6 +19,7 @@ import net.thunderbird.feature.ai.api.AiRequestDecision
 import net.thunderbird.feature.ai.api.AiResult
 import net.thunderbird.feature.ai.api.AiSettings
 import net.thunderbird.feature.ai.api.AiSettingsRepository
+import net.thunderbird.feature.ai.api.AiSummarizationInput
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -64,6 +65,73 @@ class DefaultAiRequestPolicyTest {
 
         assertEquals(2_000, input.preview?.length)
         assertEquals(null, input.fullMessage)
+    }
+
+    @Test
+    fun `metadata only denies summarization`() = runTest {
+        val settings = enabledSettings(AiAccountPolicy(true, AiDataAccessLevel.METADATA_ONLY))
+        val result = createPolicy(settings, FakeProvider(setOf(AiCapability.SUMMARIZATION)))
+            .evaluate(ACCOUNT_ID, summarizationRequest())
+
+        assertEquals(AiRequestDecision.Denied(AiError.InsufficientDataAccess), result)
+    }
+
+    @Test
+    fun `preview access keeps only bounded preview for summarization`() = runTest {
+        val testSubject = createPolicy(
+            enabledSettings(AiAccountPolicy(true, AiDataAccessLevel.PREVIEW)),
+            FakeProvider(setOf(AiCapability.SUMMARIZATION)),
+        )
+
+        val result = assertIs<AiRequestDecision.Allowed>(testSubject.evaluate(ACCOUNT_ID, summarizationRequest()))
+        val input = assertIs<AiRequest.Summarization>(result.request).input
+
+        assertEquals(2_000, input.preview?.length)
+        assertEquals(null, input.content)
+    }
+
+    @Test
+    fun `empty preview denies summarization`() = runTest {
+        val testSubject = createPolicy(
+            enabledSettings(AiAccountPolicy(true, AiDataAccessLevel.PREVIEW)),
+            FakeProvider(setOf(AiCapability.SUMMARIZATION)),
+        )
+
+        val result = testSubject.evaluate(
+            ACCOUNT_ID,
+            AiRequest.Summarization(AiSummarizationInput(preview = " ", content = "content")),
+        )
+
+        assertEquals(AiRequestDecision.Denied(AiError.InsufficientDataAccess), result)
+    }
+
+    @Test
+    fun `full message access keeps bounded content for summarization`() = runTest {
+        val testSubject = createPolicy(
+            enabledSettings(AiAccountPolicy(true, AiDataAccessLevel.FULL_MESSAGE)),
+            FakeProvider(setOf(AiCapability.SUMMARIZATION)),
+        )
+
+        val result = assertIs<AiRequestDecision.Allowed>(testSubject.evaluate(ACCOUNT_ID, summarizationRequest()))
+        val input = assertIs<AiRequest.Summarization>(result.request).input
+
+        assertEquals(32_000, input.content?.length)
+        assertEquals("preview", input.preview)
+    }
+
+    @Test
+    fun `empty full message denies summarization`() = runTest {
+        val testSubject = createPolicy(
+            enabledSettings(AiAccountPolicy(true, AiDataAccessLevel.FULL_MESSAGE)),
+            FakeProvider(setOf(AiCapability.SUMMARIZATION)),
+        )
+
+        val result = testSubject.evaluate(
+            ACCOUNT_ID,
+            AiRequest.Summarization(AiSummarizationInput(content = "")),
+        )
+
+        assertEquals(AiRequestDecision.Denied(AiError.InsufficientDataAccess), result)
     }
 
     @Test
@@ -251,6 +319,15 @@ class DefaultAiRequestPolicyTest {
             subject = "subject",
             preview = "preview".repeat(1_000),
             fullMessage = "full message",
+        ),
+    )
+
+    private fun summarizationRequest() = AiRequest.Summarization(
+        AiSummarizationInput(
+            sender = "sender",
+            subject = "subject",
+            preview = "preview".repeat(1_000),
+            content = "content".repeat(20_000),
         ),
     )
 

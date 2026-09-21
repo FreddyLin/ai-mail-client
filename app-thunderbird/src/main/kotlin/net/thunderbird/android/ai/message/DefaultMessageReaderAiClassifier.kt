@@ -36,6 +36,10 @@ internal class DefaultMessageReaderAiClassifier(
                 confidence = result.output.confidence,
             )
 
+            is AiResult.Summarization -> MessageReaderAiClassificationResult.Failure(
+                MessageReaderAiError.UNKNOWN,
+            )
+
             is AiResult.Failure -> MessageReaderAiClassificationResult.Failure(mapError(result.error))
         }
     }
@@ -56,6 +60,7 @@ internal class DefaultMessageReaderAiClassifier(
         AiError.Network -> MessageReaderAiError.NETWORK
         AiError.RateLimited -> MessageReaderAiError.RATE_LIMITED
         AiError.InvalidResponse -> MessageReaderAiError.INVALID_RESPONSE
+        AiError.InsufficientDataAccess -> MessageReaderAiError.UNKNOWN
         is AiError.UnsupportedCapability -> MessageReaderAiError.UNSUPPORTED_CAPABILITY
         AiError.Cancelled -> MessageReaderAiError.CANCELLED
         AiError.Unknown -> MessageReaderAiError.UNKNOWN

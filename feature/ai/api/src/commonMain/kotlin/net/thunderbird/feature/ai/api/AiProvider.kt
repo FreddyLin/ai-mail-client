@@ -84,6 +84,12 @@ sealed interface AiRequest {
     ) : AiRequest {
         override val capability: AiCapability = AiCapability.CLASSIFICATION
     }
+
+    data class Summarization(
+        val input: AiSummarizationInput,
+    ) : AiRequest {
+        override val capability: AiCapability = AiCapability.SUMMARIZATION
+    }
 }
 
 data class AiClassificationInput(
@@ -94,9 +100,20 @@ data class AiClassificationInput(
     val existingCategories: Set<AiClassificationCategory> = emptySet(),
 )
 
+data class AiSummarizationInput(
+    val sender: String? = null,
+    val subject: String? = null,
+    val preview: String? = null,
+    val content: String? = null,
+)
+
 sealed interface AiResult {
     data class Classification(
         val output: AiClassificationResult,
+    ) : AiResult
+
+    data class Summarization(
+        val output: AiSummarizationResult,
     ) : AiResult
 
     data class Failure(
@@ -107,6 +124,11 @@ sealed interface AiResult {
 data class AiClassificationResult(
     val categories: Set<AiClassificationCategory>,
     val confidence: Double? = null,
+    val metadata: AiResultMetadata,
+)
+
+data class AiSummarizationResult(
+    val summary: String,
     val metadata: AiResultMetadata,
 )
 
@@ -124,6 +146,7 @@ sealed interface AiError {
     data object Network : AiError
     data object RateLimited : AiError
     data object InvalidResponse : AiError
+    data object InsufficientDataAccess : AiError
     data class UnsupportedCapability(val capability: AiCapability) : AiError
     data object Cancelled : AiError
     data object Unknown : AiError

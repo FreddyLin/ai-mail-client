@@ -18,6 +18,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import net.thunderbird.feature.ai.api.AiAccountPolicy
+import net.thunderbird.feature.ai.api.AiCapability
 import net.thunderbird.feature.ai.api.AiClassificationCategory
 import net.thunderbird.feature.ai.api.AiClassificationInput
 import net.thunderbird.feature.ai.api.AiCredential
@@ -32,6 +33,7 @@ import net.thunderbird.feature.ai.api.AiRequest
 import net.thunderbird.feature.ai.api.AiResult
 import net.thunderbird.feature.ai.api.AiSettings
 import net.thunderbird.feature.ai.api.AiSettingsRepository
+import net.thunderbird.feature.ai.api.AiSummarizationInput
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -78,6 +80,52 @@ class OpenAiProviderTest {
         assertEquals(
             setOf(AiClassificationCategory.INVOICE, AiClassificationCategory.ACTION),
             assertIs<AiResult.Classification>(result).output.categories,
+        )
+    }
+
+    @Test
+    fun `summarization capability parses summary`() = runTest {
+        val testSubject = createTestSubject(
+            CapturingInterceptor(responseFor("""{"summary":"A short summary."}""")),
+        )
+
+        val result = testSubject.execute(summarizationRequest())
+
+        val summary = assertIs<AiResult.Summarization>(result).output
+        assertEquals("A short summary.", summary.summary)
+        assertEquals(AiModelId("configured-model"), summary.metadata.modelId)
+        assertTrue(AiCapability.SUMMARIZATION in testSubject.capabilities)
+    }
+
+    @Test
+    fun `summarization request uses configured model and strict structured output`() = runTest {
+        val captured = CapturingInterceptor(responseFor("""{"summary":"Summary."}"""))
+        val testSubject = createTestSubject(captured)
+
+        testSubject.execute(summarizationRequest())
+
+        val body = captured.request!!.body!!.let { body ->
+            okio.Buffer().also(body::writeTo).readUtf8()
+        }
+        assertTrue(body.contains("configured-model"))
+        assertTrue(body.contains("reasoning"))
+        assertTrue(body.contains("\"effort\":\"none\""))
+        assertTrue(body.contains("mail_summary"))
+        assertTrue(body.contains("\"strict\":true"))
+        assertTrue(body.contains("sender@example.com"))
+        assertTrue(body.contains("Subject"))
+        assertTrue(body.contains("Preview"))
+        assertTrue(body.contains("Content"))
+        assertFalse(body.contains("test-secret"))
+    }
+
+    @Test
+    fun `malformed summarization response returns invalid response`() = runTest {
+        val testSubject = createTestSubject(CapturingInterceptor(responseFor("not-json")))
+
+        assertEquals(
+            AiError.InvalidResponse,
+            assertIs<AiResult.Failure>(testSubject.execute(summarizationRequest())).error,
         )
     }
 
@@ -205,6 +253,15 @@ class OpenAiProviderTest {
             sender = "sender@example.com",
             subject = "Subject",
             preview = "Preview",
+        ),
+    )
+
+    private fun summarizationRequest() = AiRequest.Summarization(
+        AiSummarizationInput(
+            sender = "sender@example.com",
+            subject = "Subject",
+            preview = "Preview",
+            content = "Content",
         ),
     )
 

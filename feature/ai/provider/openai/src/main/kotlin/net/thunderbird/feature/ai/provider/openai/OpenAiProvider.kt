@@ -30,6 +30,8 @@ import net.thunderbird.feature.ai.api.AiRequest
 import net.thunderbird.feature.ai.api.AiResult
 import net.thunderbird.feature.ai.api.AiResultMetadata
 import net.thunderbird.feature.ai.api.AiSettingsRepository
+import net.thunderbird.feature.ai.api.AiSummarizationInput
+import net.thunderbird.feature.ai.api.AiSummarizationResult
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.HttpUrl
@@ -52,10 +54,10 @@ internal class OpenAiProvider(
 
     override val id: AiProviderId = OPENAI_PROVIDER_ID
     override val modelId: AiModelId = DEFAULT_MODEL_ID
-    override val capabilities: Set<AiCapability> = setOf(AiCapability.CLASSIFICATION)
+    override val capabilities: Set<AiCapability> = setOf(AiCapability.CLASSIFICATION, AiCapability.SUMMARIZATION)
 
     override suspend fun execute(request: AiRequest): AiResult {
-        if (request !is AiRequest.Classification) {
+        if (request !is AiRequest.Classification && request !is AiRequest.Summarization) {
             return AiResult.Failure(AiError.UnsupportedCapability(request.capability))
         }
 
@@ -70,12 +72,12 @@ internal class OpenAiProvider(
             .url(endpoint)
             .header("Authorization", "Bearer ${credential.secret}")
             .header("Content-Type", JSON_MEDIA_TYPE.toString())
-            .post(requestBody(configuredModel, request.input))
+            .post(requestBody(configuredModel, request))
             .build()
 
         return try {
             httpClient.newCall(httpRequest).await().use { response ->
-                response.toAiResult(configuredModel)
+                response.toAiResult(configuredModel, request)
             }
         } catch (_: CancellationException) {
             AiResult.Failure(AiError.Cancelled)
@@ -86,15 +88,23 @@ internal class OpenAiProvider(
         }
     }
 
-    private fun requestBody(modelId: AiModelId, input: AiClassificationInput) =
+    private fun requestBody(modelId: AiModelId, request: AiRequest) =
         buildJsonObject {
             put("model", JsonPrimitive(modelId.value))
             put("reasoning", buildJsonObject { put("effort", JsonPrimitive("none")) })
-            put("instructions", JsonPrimitive(CLASSIFICATION_INSTRUCTIONS))
-            put("input", JsonPrimitive(classificationPrompt(input)))
-            put("text", buildJsonObject {
-                put("format", structuredOutputFormat())
-            })
+            when (request) {
+                is AiRequest.Classification -> {
+                    put("instructions", JsonPrimitive(CLASSIFICATION_INSTRUCTIONS))
+                    put("input", JsonPrimitive(classificationPrompt(request.input)))
+                    put("text", buildJsonObject { put("format", classificationStructuredOutputFormat()) })
+                }
+
+                is AiRequest.Summarization -> {
+                    put("instructions", JsonPrimitive(SUMMARIZATION_INSTRUCTIONS))
+                    put("input", JsonPrimitive(summarizationPrompt(request.input)))
+                    put("text", buildJsonObject { put("format", summarizationStructuredOutputFormat()) })
+                }
+            }
         }.let { request ->
             json.encodeToString(JsonObject.serializer(), request)
                 .toRequestBody(JSON_MEDIA_TYPE)
@@ -113,7 +123,17 @@ internal class OpenAiProvider(
         }
     }
 
-    private fun structuredOutputFormat() = buildJsonObject {
+    private fun summarizationPrompt(input: AiSummarizationInput): String = buildString {
+        appendLine("Summarize this email in 2 to 3 short, factual sentences.")
+        appendLine("Do not invent information, add opinions, recommendations, or internal reasoning.")
+        appendLine("Use the language of the email when possible. Return structured JSON only.")
+        appendLine("Sender: ${input.sender.orEmpty()}")
+        appendLine("Subject: ${input.subject.orEmpty()}")
+        appendLine("Preview: ${input.preview.orEmpty()}")
+        appendLine("Content: ${input.content.orEmpty()}")
+    }
+
+    private fun classificationStructuredOutputFormat() = buildJsonObject {
         put("type", JsonPrimitive("json_schema"))
         put("name", JsonPrimitive("mail_classification"))
         put("strict", JsonPrimitive(true))
@@ -143,14 +163,35 @@ internal class OpenAiProvider(
         })
     }
 
-    private fun Response.toAiResult(modelId: AiModelId): AiResult {
+    private fun summarizationStructuredOutputFormat() = buildJsonObject {
+        put("type", JsonPrimitive("json_schema"))
+        put("name", JsonPrimitive("mail_summary"))
+        put("strict", JsonPrimitive(true))
+        put("schema", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("additionalProperties", JsonPrimitive(false))
+            put("properties", buildJsonObject {
+                put("summary", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("minLength", JsonPrimitive(1))
+                    put("maxLength", JsonPrimitive(MAX_SUMMARY_LENGTH))
+                })
+            })
+            put("required", buildJsonArray { add(JsonPrimitive("summary")) })
+        })
+    }
+
+    private fun Response.toAiResult(modelId: AiModelId, request: AiRequest): AiResult {
         if (code == 401 || code == 403) return AiResult.Failure(AiError.Authentication)
         if (code == 429) return AiResult.Failure(AiError.RateLimited)
         if (!isSuccessful) return AiResult.Failure(AiError.Unknown)
 
         val responseBody = body?.string()?.takeIf { it.isNotBlank() }
             ?: return AiResult.Failure(AiError.InvalidResponse)
-        return parseClassification(responseBody, modelId)
+        return when (request) {
+            is AiRequest.Classification -> parseClassification(responseBody, modelId)
+            is AiRequest.Summarization -> parseSummarization(responseBody, modelId)
+        }
     }
 
     private fun parseClassification(responseBody: String, modelId: AiModelId): AiResult {
@@ -171,6 +212,31 @@ internal class OpenAiProvider(
                 output = AiClassificationResult(
                     categories = categories,
                     confidence = confidence,
+                    metadata = AiResultMetadata(
+                        providerId = id,
+                        modelId = modelId,
+                        completedAt = Clock.System.now(),
+                    ),
+                ),
+            )
+        } catch (_: Exception) {
+            AiResult.Failure(AiError.InvalidResponse)
+        }
+    }
+
+    private fun parseSummarization(responseBody: String, modelId: AiModelId): AiResult {
+        return try {
+            val root = json.parseToJsonElement(responseBody).jsonObject
+            val text = root.outputText() ?: return AiResult.Failure(AiError.InvalidResponse)
+            val summary = json.parseToJsonElement(text).jsonObject["summary"]
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.takeIf { it.isNotBlank() && it.length <= MAX_SUMMARY_LENGTH }
+                ?: return AiResult.Failure(AiError.InvalidResponse)
+
+            AiResult.Summarization(
+                output = AiSummarizationResult(
+                    summary = summary,
                     metadata = AiResultMetadata(
                         providerId = id,
                         modelId = modelId,
@@ -216,6 +282,9 @@ internal class OpenAiProvider(
         val DEFAULT_MODEL_ID = AiModelId("gpt-5.6-luna")
         const val CLASSIFICATION_INSTRUCTIONS =
             "Classify email. Use only the allowed categories. Return structured JSON only."
+        const val SUMMARIZATION_INSTRUCTIONS =
+            "Summarize email briefly and factually. Do not invent information. Return structured JSON only."
+        const val MAX_SUMMARY_LENGTH = 1_000
         val json = Json { ignoreUnknownKeys = true }
     }
 }
