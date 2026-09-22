@@ -208,6 +208,7 @@ class MessageViewFragment :
     private var isDeleteMenuItemDisabled: Boolean = false
     private var wasMessageMarkedAsOpened: Boolean = false
     private var linusReaderOverflowActions: LinusMessageReaderOverflowState? = null
+    private var linusReaderReplyActions by mutableStateOf(LinusMessageReaderReplyActionsState())
 
     // Tracks whether the current Create Document flow is for exporting EML (and not for attachments)
     private var pendingEmlExport: Boolean = false
@@ -315,6 +316,24 @@ class MessageViewFragment :
         }
 
         val sizeFormatter = SizeFormatter(resources)
+        val replyActionsComposeView = messageTopView.findViewById<ComposeView>(R.id.linus_reader_reply_actions_compose_view)
+        replyActionsComposeView.isVisible = useLinusMessageHeader
+        if (useLinusMessageHeader) {
+            replyActionsComposeView.apply {
+                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+                setContent {
+                    themeProvider.WithTheme {
+                        LinusMessageReaderReplyActions(
+                            state = linusReaderReplyActions,
+                            onReply = { onReply(forceReplyAction = true) },
+                            onReplyAll = ::onReplyAll,
+                            onForward = ::onForward,
+                        )
+                    }
+                }
+            }
+        }
+
         val composeView = messageTopView.findViewById<ComposeView>(R.id.bottom_sheet_compose_view)
         composeView.apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
@@ -437,6 +456,7 @@ class MessageViewFragment :
         Log.d("MessageViewFragment displaying message %s", messageReference)
 
         linusMessageHeaderUiModel = null
+        linusReaderReplyActions = LinusMessageReaderReplyActionsState()
 
         account = accountManager.getAccount(messageReference.accountUuid)
             ?: error("Account ${messageReference.accountUuid} not found")
@@ -1590,6 +1610,7 @@ class MessageViewFragment :
             aiSummaryJob = null
             aiSummaryState.value = MessageViewAiSummaryState.Idle
             this@MessageViewFragment.message = message
+            updateLinusReaderReplyActions(message)
 
             displayHeaderForLoadingMessage(message)
             updateLinusMessageHeader(message.subject)
@@ -1600,6 +1621,14 @@ class MessageViewFragment :
             if (isResumed) {
                 markMessageAsOpened()
             }
+        }
+
+        private fun updateLinusReaderReplyActions(message: LocalMessage) {
+            val replyActions = replayAllStrategy.getReplyActions(account, message)
+            linusReaderReplyActions = LinusMessageReaderReplyActionsState(
+                isVisible = !isOutbox,
+                showReplyAll = ReplyAction.REPLY_ALL in replyActions.additionalActions,
+            )
         }
 
         override fun onMessageDataLoadFailed() {

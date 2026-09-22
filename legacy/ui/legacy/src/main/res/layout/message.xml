@@ -136,6 +136,13 @@ the 'message view theme' setting).
 
             </com.fsck.k9.view.ToolableViewAnimator>
 
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/linus_reader_reply_actions_compose_view"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                />
+
         </LinearLayout>
 
     </com.fsck.k9.view.NonLockingScrollView>
