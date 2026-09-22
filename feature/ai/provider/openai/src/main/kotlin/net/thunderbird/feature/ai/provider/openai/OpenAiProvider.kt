@@ -104,6 +104,9 @@ internal class OpenAiProvider(
                     put("input", JsonPrimitive(summarizationPrompt(request.input)))
                     put("text", buildJsonObject { put("format", summarizationStructuredOutputFormat()) })
                 }
+
+                // Writing is intentionally unsupported until the provider implementation is added.
+                is AiRequest.Writing -> error("Writing is not supported by this provider yet")
             }
         }.let { request ->
             json.encodeToString(JsonObject.serializer(), request)
@@ -191,6 +194,7 @@ internal class OpenAiProvider(
         return when (request) {
             is AiRequest.Classification -> parseClassification(responseBody, modelId)
             is AiRequest.Summarization -> parseSummarization(responseBody, modelId)
+            is AiRequest.Writing -> AiResult.Failure(AiError.UnsupportedCapability(AiCapability.WRITING))
         }
     }
 

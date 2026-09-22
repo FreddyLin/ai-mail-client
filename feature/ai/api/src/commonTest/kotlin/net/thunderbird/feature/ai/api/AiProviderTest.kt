@@ -60,6 +60,36 @@ class AiProviderTest {
     }
 
     @Test
+    fun `writing request and result are provider-independent`() = runTest {
+        val testSubject = FakeAiProviderRegistry(FakeAiProvider(setOf(AiCapability.WRITING)))
+
+        val result = testSubject.execute(
+            AiRequest.Writing(
+                AiWritingInput(
+                    operation = AiWritingOperation.PROFESSIONAL,
+                    subject = "Subject",
+                    sourceContent = "Incoming message",
+                    draftText = "Current draft",
+                ),
+            ),
+        )
+
+        assertEquals(
+            AiResult.Writing(
+                AiWritingResult(
+                    suggestedText = "Suggested text",
+                    metadata = AiResultMetadata(
+                        providerId = AiProviderId("fake"),
+                        modelId = AiModelId("fake-model"),
+                        completedAt = Instant.parse("2026-01-01T00:00:00Z"),
+                    ),
+                ),
+            ),
+            result,
+        )
+    }
+
+    @Test
     fun `missing provider is represented by provider-independent error`() = runTest {
         val testSubject = FakeAiProviderRegistry(provider = null)
 
@@ -105,17 +135,28 @@ class AiProviderTest {
                 return AiResult.Failure(AiError.UnsupportedCapability(request.capability))
             }
 
-            return AiResult.Classification(
-                AiClassificationResult(
-                    categories = setOf(AiClassificationCategory.ORDER),
-                    confidence = 0.9,
-                    metadata = AiResultMetadata(
-                        providerId = id,
-                        modelId = modelId,
-                        completedAt = Instant.parse("2026-01-01T00:00:00Z"),
-                    ),
-                ),
+            val metadata = AiResultMetadata(
+                providerId = id,
+                modelId = modelId,
+                completedAt = Instant.parse("2026-01-01T00:00:00Z"),
             )
+            return when (request) {
+                is AiRequest.Classification -> AiResult.Classification(
+                    AiClassificationResult(
+                        categories = setOf(AiClassificationCategory.ORDER),
+                        confidence = 0.9,
+                        metadata = metadata,
+                    ),
+                )
+
+                is AiRequest.Summarization -> AiResult.Summarization(
+                    AiSummarizationResult(summary = "Summary", metadata = metadata),
+                )
+
+                is AiRequest.Writing -> AiResult.Writing(
+                    AiWritingResult(suggestedText = "Suggested text", metadata = metadata),
+                )
+            }
         }
     }
 }

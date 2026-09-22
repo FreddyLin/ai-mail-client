@@ -106,6 +106,22 @@ internal class DefaultAiRequestPolicy(
                     )
                 }
         }
+
+        is AiRequest.Writing -> when (dataAccessLevel) {
+            AiDataAccessLevel.METADATA_ONLY -> if (input.sourceContent.isNullOrBlank()) {
+                this
+            } else {
+                null
+            }
+
+            AiDataAccessLevel.PREVIEW -> copy(
+                input = input.copy(sourceContent = input.sourceContent?.takeAtMost(MAX_PREVIEW_LENGTH)),
+            )
+
+            AiDataAccessLevel.FULL_MESSAGE -> copy(
+                input = input.copy(sourceContent = input.sourceContent?.takeAtMost(MAX_WRITING_CONTENT_LENGTH)),
+            )
+        }
     }
 
     private fun String.takeAtMost(maxLength: Int): String {
@@ -123,6 +139,7 @@ internal class DefaultAiRequestPolicy(
     private companion object {
         const val MAX_PREVIEW_LENGTH = 2_000
         const val MAX_SUMMARIZATION_CONTENT_LENGTH = 32_000
+        const val MAX_WRITING_CONTENT_LENGTH = 32_000
         val CONNECTION_TEST_REQUEST = AiRequest.Classification(
             input = AiClassificationInput(
                 sender = "newsletter@example.com",

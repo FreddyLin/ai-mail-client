@@ -162,6 +162,7 @@ internal class AiSettingsViewModel(
                     connectionTestResult = when (result) {
                         is AiResult.Classification -> AiConnectionTestResult.Success
                         is AiResult.Summarization -> AiConnectionTestResult.Failure(AiError.InvalidResponse)
+                        is AiResult.Writing -> AiConnectionTestResult.Failure(AiError.InvalidResponse)
                         is AiResult.Failure -> AiConnectionTestResult.Failure(result.error)
                     },
                 )

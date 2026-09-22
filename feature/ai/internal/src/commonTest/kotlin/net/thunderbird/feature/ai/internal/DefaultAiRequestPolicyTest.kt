@@ -20,6 +20,8 @@ import net.thunderbird.feature.ai.api.AiResult
 import net.thunderbird.feature.ai.api.AiSettings
 import net.thunderbird.feature.ai.api.AiSettingsRepository
 import net.thunderbird.feature.ai.api.AiSummarizationInput
+import net.thunderbird.feature.ai.api.AiWritingInput
+import net.thunderbird.feature.ai.api.AiWritingOperation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -132,6 +134,78 @@ class DefaultAiRequestPolicyTest {
         )
 
         assertEquals(AiRequestDecision.Denied(AiError.InsufficientDataAccess), result)
+    }
+
+    @Test
+    fun `metadata only denies writing with source content`() = runTest {
+        val testSubject = createPolicy(
+            enabledSettings(AiAccountPolicy(true, AiDataAccessLevel.METADATA_ONLY)),
+            FakeProvider(setOf(AiCapability.WRITING)),
+        )
+
+        val result = testSubject.evaluate(
+            ACCOUNT_ID,
+            writingRequest(sourceContent = "source content", draftText = "draft text"),
+        )
+
+        assertEquals(AiRequestDecision.Denied(AiError.InsufficientDataAccess), result)
+    }
+
+    @Test
+    fun `metadata only preserves draft-only writing without source content`() = runTest {
+        val testSubject = createPolicy(
+            enabledSettings(AiAccountPolicy(true, AiDataAccessLevel.METADATA_ONLY)),
+            FakeProvider(setOf(AiCapability.WRITING)),
+        )
+
+        val result = assertIs<AiRequestDecision.Allowed>(
+            testSubject.evaluate(
+                ACCOUNT_ID,
+                writingRequest(sourceContent = null, draftText = "draft text"),
+            ),
+        )
+        val input = assertIs<AiRequest.Writing>(result.request).input
+
+        assertEquals(null, input.sourceContent)
+        assertEquals("draft text", input.draftText)
+    }
+
+    @Test
+    fun `preview access limits writing source content and preserves draft separately`() = runTest {
+        val testSubject = createPolicy(
+            enabledSettings(AiAccountPolicy(true, AiDataAccessLevel.PREVIEW)),
+            FakeProvider(setOf(AiCapability.WRITING)),
+        )
+
+        val result = assertIs<AiRequestDecision.Allowed>(
+            testSubject.evaluate(
+                ACCOUNT_ID,
+                writingRequest(sourceContent = "source".repeat(1_000), draftText = "draft text"),
+            ),
+        )
+        val input = assertIs<AiRequest.Writing>(result.request).input
+
+        assertEquals(2_000, input.sourceContent?.length)
+        assertEquals("draft text", input.draftText)
+    }
+
+    @Test
+    fun `full message access limits only explicitly supplied writing source content`() = runTest {
+        val testSubject = createPolicy(
+            enabledSettings(AiAccountPolicy(true, AiDataAccessLevel.FULL_MESSAGE)),
+            FakeProvider(setOf(AiCapability.WRITING)),
+        )
+
+        val result = assertIs<AiRequestDecision.Allowed>(
+            testSubject.evaluate(
+                ACCOUNT_ID,
+                writingRequest(sourceContent = "source".repeat(20_000), draftText = "draft text"),
+            ),
+        )
+        val input = assertIs<AiRequest.Writing>(result.request).input
+
+        assertEquals(32_000, input.sourceContent?.length)
+        assertEquals("draft text", input.draftText)
     }
 
     @Test
@@ -328,6 +402,15 @@ class DefaultAiRequestPolicyTest {
             subject = "subject",
             preview = "preview".repeat(1_000),
             content = "content".repeat(20_000),
+        ),
+    )
+
+    private fun writingRequest(sourceContent: String?, draftText: String?) = AiRequest.Writing(
+        AiWritingInput(
+            operation = AiWritingOperation.REPLY,
+            subject = "subject",
+            sourceContent = sourceContent,
+            draftText = draftText,
         ),
     )
 

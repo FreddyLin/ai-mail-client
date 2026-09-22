@@ -40,6 +40,10 @@ internal class DefaultMessageReaderAiClassifier(
                 MessageReaderAiError.UNKNOWN,
             )
 
+            is AiResult.Writing -> MessageReaderAiClassificationResult.Failure(
+                MessageReaderAiError.UNKNOWN,
+            )
+
             is AiResult.Failure -> MessageReaderAiClassificationResult.Failure(mapError(result.error))
         }
     }

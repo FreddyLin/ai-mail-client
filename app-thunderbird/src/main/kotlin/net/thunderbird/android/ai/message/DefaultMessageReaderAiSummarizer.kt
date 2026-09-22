@@ -34,6 +34,11 @@ internal class DefaultMessageReaderAiSummarizer(
             is AiResult.Classification -> MessageReaderAiSummarizationResult.Failure(
                 MessageReaderAiSummarizationError.UNKNOWN,
             )
+
+            is AiResult.Writing -> MessageReaderAiSummarizationResult.Failure(
+                MessageReaderAiSummarizationError.UNKNOWN,
+            )
+
             is AiResult.Failure -> MessageReaderAiSummarizationResult.Failure(mapError(result.error))
         }
     }

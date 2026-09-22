@@ -90,6 +90,12 @@ sealed interface AiRequest {
     ) : AiRequest {
         override val capability: AiCapability = AiCapability.SUMMARIZATION
     }
+
+    data class Writing(
+        val input: AiWritingInput,
+    ) : AiRequest {
+        override val capability: AiCapability = AiCapability.WRITING
+    }
 }
 
 data class AiClassificationInput(
@@ -107,6 +113,20 @@ data class AiSummarizationInput(
     val content: String? = null,
 )
 
+enum class AiWritingOperation {
+    REPLY,
+    SHORTEN,
+    PROFESSIONAL,
+    FRIENDLY,
+}
+
+data class AiWritingInput(
+    val operation: AiWritingOperation,
+    val subject: String? = null,
+    val sourceContent: String? = null,
+    val draftText: String? = null,
+)
+
 sealed interface AiResult {
     data class Classification(
         val output: AiClassificationResult,
@@ -114,6 +134,10 @@ sealed interface AiResult {
 
     data class Summarization(
         val output: AiSummarizationResult,
+    ) : AiResult
+
+    data class Writing(
+        val output: AiWritingResult,
     ) : AiResult
 
     data class Failure(
@@ -129,6 +153,11 @@ data class AiClassificationResult(
 
 data class AiSummarizationResult(
     val summary: String,
+    val metadata: AiResultMetadata,
+)
+
+data class AiWritingResult(
+    val suggestedText: String,
     val metadata: AiResultMetadata,
 )
 
