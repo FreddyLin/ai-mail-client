@@ -34,6 +34,8 @@ import net.thunderbird.feature.ai.api.AiResult
 import net.thunderbird.feature.ai.api.AiSettings
 import net.thunderbird.feature.ai.api.AiSettingsRepository
 import net.thunderbird.feature.ai.api.AiSummarizationInput
+import net.thunderbird.feature.ai.api.AiWritingInput
+import net.thunderbird.feature.ai.api.AiWritingOperation
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -119,6 +121,89 @@ class OpenAiProviderTest {
         assertTrue(body.contains("immer auf Deutsch"))
         assertTrue(body.contains("2 bis 3 kurzen"))
         assertFalse(body.contains("test-secret"))
+    }
+
+    @Test
+    fun `reply writing parses suggested text`() = runTest {
+        assertWritingOperation(AiWritingOperation.REPLY)
+    }
+
+    @Test
+    fun `shorten writing parses suggested text`() = runTest {
+        assertWritingOperation(AiWritingOperation.SHORTEN)
+    }
+
+    @Test
+    fun `professional writing parses suggested text`() = runTest {
+        assertWritingOperation(AiWritingOperation.PROFESSIONAL)
+    }
+
+    @Test
+    fun `friendly writing parses suggested text`() = runTest {
+        assertWritingOperation(AiWritingOperation.FRIENDLY)
+    }
+
+    @Test
+    fun `writing request uses strict output and only provided reduced input`() = runTest {
+        val captured = CapturingInterceptor(responseFor("""{"suggested_text":"Suggested reply"}"""))
+        val testSubject = createTestSubject(captured)
+
+        testSubject.execute(
+            AiRequest.Writing(
+                AiWritingInput(
+                    operation = AiWritingOperation.REPLY,
+                    subject = "Subject",
+                    sourceContent = "Reduced source content",
+                    draftText = "Draft guidance",
+                ),
+            ),
+        )
+
+        val body = captured.request!!.body!!.let { body ->
+            okio.Buffer().also(body::writeTo).readUtf8()
+        }
+        assertTrue(body.contains("mail_writing"))
+        assertTrue(body.contains("\"strict\":true"))
+        assertTrue(body.contains("Reduced source content"))
+        assertTrue(body.contains("Draft guidance"))
+        assertFalse(body.contains("test-secret"))
+    }
+
+    @Test
+    fun `empty writing output returns invalid response`() = runTest {
+        val testSubject = createTestSubject(
+            CapturingInterceptor(responseFor("""{"suggested_text":""}""")),
+        )
+
+        assertEquals(
+            AiError.InvalidResponse,
+            assertIs<AiResult.Failure>(testSubject.execute(replyWritingRequest())).error,
+        )
+    }
+
+    @Test
+    fun `missing required writing input is rejected before the provider request`() = runTest {
+        val captured = CapturingInterceptor(responseFor("""{"suggested_text":"unused"}"""))
+        val testSubject = createTestSubject(captured)
+
+        assertEquals(
+            AiError.InsufficientDataAccess,
+            assertIs<AiResult.Failure>(
+                testSubject.execute(
+                    AiRequest.Writing(
+                        AiWritingInput(operation = AiWritingOperation.REPLY),
+                    ),
+                ),
+            ).error,
+        )
+        assertEquals(null, captured.request)
+    }
+
+    @Test
+    fun `writing capability is exposed`() {
+        val testSubject = createTestSubject(CapturingInterceptor())
+
+        assertTrue(AiCapability.WRITING in testSubject.capabilities)
     }
 
     @Test
@@ -244,6 +329,26 @@ class OpenAiProviderTest {
         return assertIs<AiResult.Failure>(testSubject.execute(classificationRequest())).error
     }
 
+    private suspend fun assertWritingOperation(operation: AiWritingOperation) {
+        val testSubject = createTestSubject(
+            CapturingInterceptor(responseFor("""{"suggested_text":"Suggested text"}""")),
+        )
+
+        val result = testSubject.execute(
+            when (operation) {
+                AiWritingOperation.REPLY -> replyWritingRequest()
+                AiWritingOperation.SHORTEN -> writingRequest(operation, draftText = "Draft text")
+                AiWritingOperation.PROFESSIONAL -> writingRequest(operation, draftText = "Draft text")
+                AiWritingOperation.FRIENDLY -> writingRequest(operation, draftText = "Draft text")
+            },
+        )
+
+        assertEquals(
+            "Suggested text",
+            assertIs<AiResult.Writing>(result).output.suggestedText,
+        )
+    }
+
     private fun createTestSubject(interceptor: Interceptor): OpenAiProvider = OpenAiProvider(
         httpClient = OkHttpClient.Builder().addInterceptor(interceptor).build(),
         credentialStore = FakeAiCredentialStore(AiCredential("test-secret")),
@@ -264,6 +369,24 @@ class OpenAiProviderTest {
             subject = "Subject",
             preview = "Preview",
             content = "Content",
+        ),
+    )
+
+    private fun replyWritingRequest() = writingRequest(
+        operation = AiWritingOperation.REPLY,
+        sourceContent = "Incoming message",
+    )
+
+    private fun writingRequest(
+        operation: AiWritingOperation,
+        sourceContent: String? = null,
+        draftText: String? = "Draft text",
+    ) = AiRequest.Writing(
+        AiWritingInput(
+            operation = operation,
+            subject = "Subject",
+            sourceContent = sourceContent,
+            draftText = draftText,
         ),
     )
 

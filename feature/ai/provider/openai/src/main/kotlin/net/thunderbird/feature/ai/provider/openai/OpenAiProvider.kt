@@ -32,6 +32,9 @@ import net.thunderbird.feature.ai.api.AiResultMetadata
 import net.thunderbird.feature.ai.api.AiSettingsRepository
 import net.thunderbird.feature.ai.api.AiSummarizationInput
 import net.thunderbird.feature.ai.api.AiSummarizationResult
+import net.thunderbird.feature.ai.api.AiWritingInput
+import net.thunderbird.feature.ai.api.AiWritingOperation
+import net.thunderbird.feature.ai.api.AiWritingResult
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.HttpUrl
@@ -54,10 +57,20 @@ internal class OpenAiProvider(
 
     override val id: AiProviderId = OPENAI_PROVIDER_ID
     override val modelId: AiModelId = DEFAULT_MODEL_ID
-    override val capabilities: Set<AiCapability> = setOf(AiCapability.CLASSIFICATION, AiCapability.SUMMARIZATION)
+    override val capabilities: Set<AiCapability> = setOf(
+        AiCapability.CLASSIFICATION,
+        AiCapability.SUMMARIZATION,
+        AiCapability.WRITING,
+    )
 
     override suspend fun execute(request: AiRequest): AiResult {
-        if (request !is AiRequest.Classification && request !is AiRequest.Summarization) {
+        if (request is AiRequest.Writing && !hasRequiredWritingInput(request.input)) {
+            return AiResult.Failure(AiError.InsufficientDataAccess)
+        }
+        if (request !is AiRequest.Classification &&
+            request !is AiRequest.Summarization &&
+            request !is AiRequest.Writing
+        ) {
             return AiResult.Failure(AiError.UnsupportedCapability(request.capability))
         }
 
@@ -105,8 +118,11 @@ internal class OpenAiProvider(
                     put("text", buildJsonObject { put("format", summarizationStructuredOutputFormat()) })
                 }
 
-                // Writing is intentionally unsupported until the provider implementation is added.
-                is AiRequest.Writing -> error("Writing is not supported by this provider yet")
+                is AiRequest.Writing -> {
+                    put("instructions", JsonPrimitive(WRITING_INSTRUCTIONS))
+                    put("input", JsonPrimitive(writingPrompt(request.input)))
+                    put("text", buildJsonObject { put("format", writingStructuredOutputFormat()) })
+                }
             }
         }.let { request ->
             json.encodeToString(JsonObject.serializer(), request)
@@ -134,6 +150,19 @@ internal class OpenAiProvider(
         appendLine("Subject: ${input.subject.orEmpty()}")
         appendLine("Preview: ${input.preview.orEmpty()}")
         appendLine("Content: ${input.content.orEmpty()}")
+    }
+
+    private fun writingPrompt(input: AiWritingInput): String = buildString {
+        appendLine("Generate only the suggested email body text.")
+        appendLine("Do not include an explanation, subject line, signature, quote, analysis, or Markdown.")
+        appendLine("Do not invent facts, recipients, attachments, or commitments.")
+        appendLine("Write in the language of the relevant input and preserve that language for editing operations.")
+        appendLine("Operation: ${input.operation.name}")
+        input.subject?.let { appendLine("Subject: $it") }
+        if (input.operation == AiWritingOperation.REPLY) {
+            appendLine("Original message content: ${input.sourceContent.orEmpty()}")
+        }
+        input.draftText?.let { appendLine("Current draft or instructions: $it") }
     }
 
     private fun classificationStructuredOutputFormat() = buildJsonObject {
@@ -184,6 +213,23 @@ internal class OpenAiProvider(
         })
     }
 
+    private fun writingStructuredOutputFormat() = buildJsonObject {
+        put("type", JsonPrimitive("json_schema"))
+        put("name", JsonPrimitive("mail_writing"))
+        put("strict", JsonPrimitive(true))
+        put("schema", buildJsonObject {
+            put("type", JsonPrimitive("object"))
+            put("additionalProperties", JsonPrimitive(false))
+            put("properties", buildJsonObject {
+                put("suggested_text", buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("minLength", JsonPrimitive(1))
+                })
+            })
+            put("required", buildJsonArray { add(JsonPrimitive("suggested_text")) })
+        })
+    }
+
     private fun Response.toAiResult(modelId: AiModelId, request: AiRequest): AiResult {
         if (code == 401 || code == 403) return AiResult.Failure(AiError.Authentication)
         if (code == 429) return AiResult.Failure(AiError.RateLimited)
@@ -194,7 +240,7 @@ internal class OpenAiProvider(
         return when (request) {
             is AiRequest.Classification -> parseClassification(responseBody, modelId)
             is AiRequest.Summarization -> parseSummarization(responseBody, modelId)
-            is AiRequest.Writing -> AiResult.Failure(AiError.UnsupportedCapability(AiCapability.WRITING))
+            is AiRequest.Writing -> parseWriting(responseBody, modelId)
         }
     }
 
@@ -253,6 +299,38 @@ internal class OpenAiProvider(
         }
     }
 
+    private fun parseWriting(responseBody: String, modelId: AiModelId): AiResult {
+        return try {
+            val root = json.parseToJsonElement(responseBody).jsonObject
+            val text = root.outputText() ?: return AiResult.Failure(AiError.InvalidResponse)
+            val suggestedText = json.parseToJsonElement(text).jsonObject["suggested_text"]
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.takeIf { it.isNotBlank() }
+                ?: return AiResult.Failure(AiError.InvalidResponse)
+
+            AiResult.Writing(
+                output = AiWritingResult(
+                    suggestedText = suggestedText,
+                    metadata = AiResultMetadata(
+                        providerId = id,
+                        modelId = modelId,
+                        completedAt = Clock.System.now(),
+                    ),
+                ),
+            )
+        } catch (_: Exception) {
+            AiResult.Failure(AiError.InvalidResponse)
+        }
+    }
+
+    private fun hasRequiredWritingInput(input: AiWritingInput): Boolean = when (input.operation) {
+        AiWritingOperation.REPLY -> !input.sourceContent.isNullOrBlank()
+        AiWritingOperation.SHORTEN,
+        AiWritingOperation.PROFESSIONAL,
+        AiWritingOperation.FRIENDLY -> !input.draftText.isNullOrBlank()
+    }
+
     private fun JsonObject.outputText(): String? = get("output")
         ?.jsonArray
         ?.asSequence()
@@ -288,6 +366,8 @@ internal class OpenAiProvider(
             "Classify email. Use only the allowed categories. Return structured JSON only."
         const val SUMMARIZATION_INSTRUCTIONS =
             "Fasse die E-Mail immer auf Deutsch kurz und sachlich zusammen. Erfinde nichts. Gib ausschließlich strukturiertes JSON zurück."
+        const val WRITING_INSTRUCTIONS =
+            "Erzeuge ausschließlich den vorgeschlagenen Mailtext. Keine Erklärung, keine Betreffzeile, keine Signatur und keine Zitate. Gib ausschließlich strukturiertes JSON zurück."
         const val MAX_SUMMARY_LENGTH = 1_000
         val json = Json { ignoreUnknownKeys = true }
     }

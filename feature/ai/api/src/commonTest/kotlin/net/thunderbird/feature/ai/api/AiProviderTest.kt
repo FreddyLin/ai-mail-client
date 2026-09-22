@@ -30,6 +30,25 @@ class AiProviderTest {
     }
 
     @Test
+    fun `writing request is rejected when capability is missing`() = runTest {
+        val testSubject = FakeAiProviderRegistry(FakeAiProvider(emptySet()))
+
+        val result = testSubject.execute(
+            AiRequest.Writing(
+                AiWritingInput(
+                    operation = AiWritingOperation.REPLY,
+                    sourceContent = "Incoming message",
+                ),
+            ),
+        )
+
+        assertEquals(
+            AiResult.Failure(AiError.UnsupportedCapability(AiCapability.WRITING)),
+            result,
+        )
+    }
+
+    @Test
     fun `classification request returns provider-independent result`() = runTest {
         val testSubject = FakeAiProviderRegistry(FakeAiProvider(setOf(AiCapability.CLASSIFICATION)))
 
