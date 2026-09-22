@@ -224,6 +224,7 @@ open class MessageHomeActivity :
             root = navigationRoot,
             mailContent = mailContent,
         ).also { it.install() }
+        linusMailNavigationHost?.setReaderVisible(displayMode != DisplayMode.MESSAGE_LIST)
     }
 
     private fun initializeFoldableObserver() {
@@ -1260,6 +1261,7 @@ open class MessageHomeActivity :
     }
 
     private fun showMessageViewPlaceHolder() {
+        linusMailNavigationHost?.setReaderVisible(false)
         removeMessageViewContainerFragment()
 
         // Add placeholder fragment if necessary
@@ -1357,6 +1359,7 @@ open class MessageHomeActivity :
     }
 
     private fun showMessageList() {
+        linusMailNavigationHost?.setReaderVisible(false)
         messageViewOnly = false
         messageListWasDisplayed = true
         displayMode = DisplayMode.MESSAGE_LIST
@@ -1385,6 +1388,7 @@ open class MessageHomeActivity :
     }
 
     private fun showMessageView() {
+        linusMailNavigationHost?.setReaderVisible(true)
         val messageViewContainerFragment = checkNotNull(this.messageViewContainerFragment)
 
         displayMode = DisplayMode.MESSAGE_VIEW

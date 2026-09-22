@@ -21,14 +21,18 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.core.view.MenuHost
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.DialogFragment
@@ -60,12 +64,15 @@ import com.fsck.k9.mailstore.AttachmentViewInfo
 import com.fsck.k9.mailstore.LocalMessage
 import com.fsck.k9.mailstore.MessageViewInfo
 import com.fsck.k9.provider.RawMessageProvider
+import com.fsck.k9.helper.MessageHelper
 import com.fsck.k9.ui.R
 import com.fsck.k9.ui.base.extensions.withArguments
 import com.fsck.k9.ui.choosefolder.ChooseFolderActivity
 import com.fsck.k9.ui.choosefolder.ChooseFolderResultContract
 import com.fsck.k9.ui.helper.SizeFormatter
+import com.fsck.k9.ui.helper.RelativeDateTimeFormatter
 import com.fsck.k9.ui.messagedetails.MessageDetailsFragment
+import com.fsck.k9.ui.messagelist.smartcategory.SmartCategoryRepository
 import com.fsck.k9.ui.messagesource.MessageSourceActivity
 import com.fsck.k9.ui.messageview.MessageCryptoPresenter.MessageCryptoMvpView
 import com.fsck.k9.ui.settings.account.AccountSettingsActivity
@@ -77,6 +84,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
@@ -94,6 +102,7 @@ import net.thunderbird.core.ui.contract.mvi.observe
 import net.thunderbird.core.ui.theme.api.FeatureThemeProvider
 import net.thunderbird.core.ui.theme.api.Theme
 import net.thunderbird.core.ui.theme.manager.ThemeManager
+import net.thunderbird.components.ui.bolt.atom.icon.Icons as BoltIcons
 import net.thunderbird.feature.mail.folder.api.OutboxFolderManager
 import net.thunderbird.feature.mail.message.export.MessageExporter
 import net.thunderbird.feature.mail.message.export.MessageFileNameSuggester
@@ -121,6 +130,9 @@ import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.koin.compose.koinInject
 import org.openintents.openpgp.util.OpenPgpIntentStarter
 import net.thunderbird.feature.mail.message.reader.api.R as MessageReaderR
+import net.thunderbird.feature.mail.message.list.ui.state.SmartCategory
+
+private const val LINUS_OVERFLOW_TOGGLE_FLAGGED = -1
 
 @Suppress("LargeClass", "TooManyFunctions")
 class MessageViewFragment :
@@ -141,11 +153,15 @@ class MessageViewFragment :
     private val featureFlagProvider: FeatureFlagProvider by inject()
     private val appNameProvider: AppNameProvider by inject()
     private val messageReaderViewModel: MessageReaderViewContract.ViewModel<Part> by viewModel()
+    private val messageHelper: MessageHelper by inject()
+    private val messageViewRecipientFormatter: MessageViewRecipientFormatter by inject()
+    private val relativeDateTimeFormatter: RelativeDateTimeFormatter by inject()
     private val logger: Logger by inject()
     private val replayAllStrategy: ReplyActionStrategy<LegacyAccountDto, Message> by inject()
     private val aiClassifier: MessageReaderAiClassifier? by lazy { getKoin().getOrNull() }
     private val aiCategoryAssigner: MessageReaderAiCategoryAssigner? by lazy { getKoin().getOrNull() }
     private val aiSummarizer: MessageReaderAiSummarizer? by lazy { getKoin().getOrNull() }
+    private val smartCategoryRepository: SmartCategoryRepository by inject()
 
     private val createDocumentLauncher: ActivityResultLauncher<CreateDocumentResultContract.Input> =
         registerForActivityResult(CreateDocumentResultContract()) { documentUri ->
@@ -191,15 +207,19 @@ class MessageViewFragment :
     private var currentAttachmentViewInfo: AttachmentViewInfo? = null
     private var isDeleteMenuItemDisabled: Boolean = false
     private var wasMessageMarkedAsOpened: Boolean = false
+    private var linusReaderOverflowActions: LinusMessageReaderOverflowState? = null
 
     // Tracks whether the current Create Document flow is for exporting EML (and not for attachments)
     private var pendingEmlExport: Boolean = false
 
     private var isActive: Boolean = false
+    private var useLinusMailReader: Boolean = false
 
     private val attachmentListBottomSheetState = MutableStateFlow(persistentListOf<AttachmentListItemModel>())
+    private val linusReaderOverflowState = MutableStateFlow<LinusMessageReaderOverflowState?>(null)
     private val aiClassificationState = MutableStateFlow<MessageReaderAiClassificationResult?>(null)
     private val aiSummaryState = MutableStateFlow<MessageViewAiSummaryState>(MessageViewAiSummaryState.Idle)
+    private var linusMessageHeaderUiModel by mutableStateOf<LinusMessageHeaderUiModel?>(null)
     private var aiSummaryJob: Job? = null
 
     private val interactionSettings: InteractionSettings
@@ -207,6 +227,8 @@ class MessageViewFragment :
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
+
+        useLinusMailReader = context.resources.getBoolean(R.bool.linus_mail_reader_header_enabled)
 
         fragmentListener = try {
             activity as MessageViewFragmentListener
@@ -261,31 +283,45 @@ class MessageViewFragment :
 
     private fun initializeMessageTopView(messageTopView: MessageTopView) {
         messageTopView.setShowAccountIndicator(showAccountIndicator)
+        val useLinusMessageHeader = resources.getBoolean(R.bool.linus_mail_reader_header_enabled)
+        messageTopView.setUseLinusMessageHeader(useLinusMessageHeader)
 
-        val sizeFormatter = SizeFormatter(resources)
-        val summaryComposeView = messageTopView.findViewById<ComposeView>(R.id.ai_summary_compose_view)
-        summaryComposeView.apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
-                themeProvider.WithTheme(darkTheme = themeManager.messageViewTheme === Theme.DARK) {
-                    val summaryState by aiSummaryState.collectAsState()
-                    MessageViewAiSummary(
-                        state = summaryState,
-                        onRetry = ::startAiSummaryRequest,
-                        onCollapse = ::collapseAiSummary,
-                        onExpand = ::expandAiSummary,
-                        onRegenerate = ::startAiSummaryRequest,
-                    )
+        val readerShellComposeView = messageTopView.findViewById<ComposeView>(R.id.linus_reader_shell_compose_view)
+        readerShellComposeView.isVisible = useLinusMessageHeader
+        if (useLinusMessageHeader) {
+            readerShellComposeView.apply {
+                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+                setContent {
+                    themeProvider.WithTheme(darkTheme = themeManager.messageViewTheme === Theme.DARK) {
+                        val summaryState by aiSummaryState.collectAsState()
+                        LinusMessageReaderShell(
+                            headerModel = linusMessageHeaderUiModel,
+                            summaryState = summaryState,
+                            isMessageRead = isMessageRead,
+                            onBack = { requireActivity().onBackPressedDispatcher.onBackPressed() },
+                            onDelete = ::onDelete,
+                            onToggleRead = ::onToggleRead,
+                            onOverflow = ::showLinusReaderOverflow,
+                            onRecipientsClick = messageHeaderClickListener::onParticipantsContainerClick,
+                            onStarClick = ::onToggleFlagged,
+                            onSummaryRetry = ::startAiSummaryRequest,
+                            onSummaryCollapse = ::collapseAiSummary,
+                            onSummaryExpand = ::expandAiSummary,
+                            onSummaryRegenerate = ::startAiSummaryRequest,
+                        )
+                    }
                 }
             }
         }
 
+        val sizeFormatter = SizeFormatter(resources)
         val composeView = messageTopView.findViewById<ComposeView>(R.id.bottom_sheet_compose_view)
         composeView.apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 themeProvider.WithTheme {
                     val attachments by attachmentListBottomSheetState.collectAsState()
+                    val linusOverflowState by linusReaderOverflowState.collectAsState()
                     val (stateHolder, dispatch) = messageReaderViewModel.observe { effect ->
                         when (effect) {
                             Effect.TriggerOnReplyAllListener -> onReplyAll()
@@ -296,6 +332,16 @@ class MessageViewFragment :
                     val messageReaderBottomSheetContent = koinInject<MessageReaderBottomSheet>()
 
                     when {
+                        linusOverflowState != null -> {
+                            LinusMessageReaderOverflowBottomSheet(
+                                primaryActions = linusOverflowState!!.primaryActions,
+                                secondaryActions = linusOverflowState!!.secondaryActions,
+                                destructiveAction = linusOverflowState!!.destructiveAction,
+                                onAction = ::onLinusReaderOverflowAction,
+                                onDismissRequest = { linusReaderOverflowState.value = null },
+                            )
+                        }
+
                         attachments.isNotEmpty() -> {
                             AttachmentListModalBottomSheet(
                                 attachments = attachments,
@@ -351,12 +397,19 @@ class MessageViewFragment :
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        updateLinusReaderToolbarVisibility()
+
         val menuHost: MenuHost = requireActivity()
         menuHost.addMenuProvider(
             object : MenuProvider {
                 override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
                     if (!isActive) return
                     menuInflater.inflate(R.menu.message_view_option_menu, menu)
+                    if (isLinusMailReader()) {
+                        menu.findItem(R.id.linus_reader_overflow)?.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                    } else {
+                        menu.findItem(R.id.linus_reader_overflow)?.isVisible = false
+                    }
                 }
 
                 override fun onPrepareMenu(menu: Menu) {
@@ -366,6 +419,10 @@ class MessageViewFragment :
 
                 override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
                     if (!isActive) return false
+                    if (isLinusMailReader() && menuItem.itemId == R.id.linus_reader_overflow) {
+                        showLinusReaderOverflow()
+                        return true
+                    }
                     return selectMenuItem(menuItem)
                 }
             },
@@ -378,6 +435,8 @@ class MessageViewFragment :
 
     private fun loadMessage(messageReference: MessageReference) {
         Log.d("MessageViewFragment displaying message %s", messageReference)
+
+        linusMessageHeaderUiModel = null
 
         account = accountManager.getAccount(messageReference.accountUuid)
             ?: error("Account ${messageReference.accountUuid} not found")
@@ -397,6 +456,7 @@ class MessageViewFragment :
         isActive = menuVisible
 
         super.setMenuVisibility(menuVisible)
+        updateLinusReaderToolbarVisibility()
 
         if (menuVisible) {
             messageLoaderHelper.resumeCryptoOperationIfNecessary()
@@ -519,6 +579,185 @@ class MessageViewFragment :
             }
             toggleTheme.isVisible = true
         }
+
+        if (isLinusMailReader()) {
+            linusReaderOverflowActions = createLinusReaderOverflowState(menu)
+            menu.findItem(R.id.linus_reader_overflow)?.isVisible = true
+            hideLegacyOverflowItems(menu)
+        }
+    }
+
+    override fun onDestroyView() {
+        if (isLinusMailReader()) {
+            activity?.findViewById<View>(R.id.toolbar)?.isVisible = true
+        }
+        super.onDestroyView()
+    }
+
+    private fun updateLinusReaderToolbarVisibility() {
+        if (isLinusMailReader()) {
+            activity?.findViewById<View>(R.id.toolbar)?.isVisible = !isActive
+        }
+    }
+
+    private fun isLinusMailReader(): Boolean = useLinusMailReader
+
+    private fun hideLegacyOverflowItems(menu: Menu) {
+        listOf(
+            R.id.refile,
+            R.id.move_to_drafts,
+            R.id.unsubscribe,
+            R.id.show_headers,
+            R.id.export_eml,
+            R.id.print,
+            R.id.set_format_html,
+            R.id.set_format_plain,
+            R.id.toggle_message_view_theme,
+            R.id.view_compose,
+            R.id.classify_with_ai,
+            R.id.summarize_with_ai,
+        ).forEach { itemId -> menu.findItem(itemId)?.isVisible = false }
+    }
+
+    private fun showLinusReaderOverflow() {
+        linusReaderOverflowActions?.let { state ->
+            linusReaderOverflowState.value = state
+        }
+    }
+
+    private fun createLinusReaderOverflowState(menu: Menu): LinusMessageReaderOverflowState {
+        val primaryActions = buildList {
+            add(
+                LinusMessageReaderOverflowAction(
+                    id = LINUS_OVERFLOW_TOGGLE_FLAGGED,
+                    labelResId = if (message?.isSet(Flag.FLAGGED) == true) {
+                        R.string.linus_mail_reader_overflow_unmark
+                    } else {
+                        R.string.linus_mail_reader_overflow_mark
+                    },
+                    icon = BoltIcons.Outlined.Star,
+                ),
+            )
+            menuAction(
+                menu = menu,
+                itemId = R.id.toggle_unread,
+                labelResId = if (isMessageRead) {
+                    R.string.linus_mail_reader_overflow_mark_unread
+                } else {
+                    R.string.linus_mail_reader_overflow_mark_read
+                },
+                icon = if (isMessageRead) BoltIcons.Outlined.MarkEmailUnread else BoltIcons.Outlined.MarkEmailRead,
+            )?.let(::add)
+            menuAction(menu, R.id.archive, R.string.linus_mail_reader_overflow_archive, BoltIcons.Outlined.Archive)?.let(::add)
+            menuAction(menu, R.id.move, R.string.linus_mail_reader_overflow_move, BoltIcons.Outlined.DriveFileMove)?.let(::add)
+            menuAction(menu, R.id.copy, R.string.linus_mail_reader_overflow_copy, BoltIcons.Outlined.DriveFileMove)?.let(::add)
+            menuAction(menu, R.id.spam, R.string.linus_mail_reader_overflow_spam, BoltIcons.Outlined.Report)?.let(::add)
+        }
+
+        val secondaryActions = buildList {
+            add(
+                LinusMessageReaderOverflowAction(
+                    id = R.id.share,
+                    labelResId = R.string.linus_mail_reader_overflow_share,
+                    icon = BoltIcons.Outlined.Upload,
+                ),
+            )
+            menuAction(menu, R.id.print, R.string.linus_mail_reader_overflow_print, BoltIcons.Outlined.Description)
+                ?.let(::add)
+            menuAction(menu, R.id.show_headers, R.string.linus_mail_reader_overflow_details, BoltIcons.Outlined.Info)
+                ?.let(::add)
+            menuAction(menu, R.id.classify_with_ai, R.string.ai_classification_action, BoltIcons.Outlined.Spa)
+                ?.let(::add)
+            if (resources.getBoolean(R.bool.linus_mail_inbox_enabled)) {
+                add(
+                    LinusMessageReaderOverflowAction(
+                        id = R.id.assign_smart_category,
+                        labelResId = R.string.assign_smart_category_action,
+                        icon = BoltIcons.Outlined.FavoriteFolder,
+                    ),
+                )
+            }
+        }
+
+        val destructiveAction = menu.findItem(R.id.delete)?.takeIf { it.isVisible && it.isEnabled }?.let {
+            LinusMessageReaderOverflowAction(
+                id = R.id.delete,
+                labelResId = R.string.linus_mail_reader_overflow_delete,
+                icon = BoltIcons.Outlined.Delete,
+                isDestructive = true,
+            )
+        }
+
+        return LinusMessageReaderOverflowState(
+            primaryActions = primaryActions,
+            secondaryActions = secondaryActions,
+            destructiveAction = destructiveAction,
+        )
+    }
+
+    private fun menuAction(
+        menu: Menu,
+        itemId: Int,
+        labelResId: Int,
+        icon: androidx.compose.ui.graphics.vector.ImageVector,
+    ): LinusMessageReaderOverflowAction? {
+        val item = menu.findItem(itemId) ?: return null
+        return if (item.isVisible && item.isEnabled) {
+            LinusMessageReaderOverflowAction(itemId, labelResId, icon)
+        } else {
+            null
+        }
+    }
+
+    private fun onLinusReaderOverflowAction(actionId: Int) {
+        linusReaderOverflowState.value = null
+        when (actionId) {
+            LINUS_OVERFLOW_TOGGLE_FLAGGED -> onToggleFlagged()
+            R.id.delete -> onDelete()
+            R.id.share -> onSendAlternate()
+            R.id.toggle_unread -> onToggleRead()
+            R.id.archive -> onArchive()
+            R.id.spam -> onSpam()
+            R.id.move -> onMove()
+            R.id.copy -> onCopy()
+            R.id.print -> printMessage()
+            R.id.show_headers -> onShowHeaders()
+            R.id.classify_with_ai -> onClassifyWithAi()
+            R.id.assign_smart_category -> showSmartCategoryPicker()
+        }
+    }
+
+    private fun showSmartCategoryPicker() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val reference = messageReference.toIdentityString()
+            val assignments = smartCategoryRepository.observeAssignments().first()[reference]
+            val categories = SmartCategory.entries.filter { it != SmartCategory.ALL }
+            val labels = categories.map { category ->
+                val isAssigned = assignments?.assigned?.containsKey(category) == true
+                (if (isAssigned) "✓ " else "") + getString(category.labelResource())
+            }.toTypedArray()
+
+            AlertDialog.Builder(requireContext())
+                .setTitle(R.string.assign_smart_category_action)
+                .setItems(labels) { _, index ->
+                    val category = categories[index]
+                    if (assignments?.assigned?.containsKey(category) == true) {
+                        smartCategoryRepository.removeCategory(reference, category)
+                    } else {
+                        smartCategoryRepository.assignCategory(reference, category)
+                    }
+                }
+                .show()
+        }
+    }
+
+    private fun SmartCategory.labelResource(): Int = when (this) {
+        SmartCategory.ALL -> net.thunderbird.feature.mail.message.list.R.string.smart_category_all
+        SmartCategory.IMPORTANT -> net.thunderbird.feature.mail.message.list.R.string.smart_category_important
+        SmartCategory.ACTION -> net.thunderbird.feature.mail.message.list.R.string.smart_category_action
+        SmartCategory.INVOICE -> net.thunderbird.feature.mail.message.list.R.string.smart_category_invoice
+        SmartCategory.ORDER -> net.thunderbird.feature.mail.message.list.R.string.smart_category_order
+        SmartCategory.NEWSLETTER -> net.thunderbird.feature.mail.message.list.R.string.smart_category_newsletter
     }
 
     @Suppress("CyclomaticComplexMethod", "ReturnCount")
@@ -727,7 +966,20 @@ class MessageViewFragment :
 
         if (messageViewInfo.subject != null) {
             displaySubject(messageViewInfo.subject)
+            updateLinusMessageHeader(messageViewInfo.subject)
         }
+    }
+
+    private fun updateLinusMessageHeader(subject: String = message?.subject.orEmpty()) {
+        val loadedMessage = message ?: return
+        linusMessageHeaderUiModel = createLinusMessageHeaderUiModel(
+            message = loadedMessage,
+            account = account,
+            subject = subject,
+            messageHelper = messageHelper,
+            recipientFormatter = messageViewRecipientFormatter,
+            relativeDateTimeFormatter = relativeDateTimeFormatter,
+        )
     }
 
     private fun hideKeyboard() {
@@ -1135,6 +1387,7 @@ class MessageViewFragment :
         messagingController.setFlag(account, message.folder.databaseId, listOf(message), flag, newState)
 
         messageTopView.setHeaders(message, account, true)
+        updateLinusMessageHeader()
 
         invalidateMenu()
     }
@@ -1339,6 +1592,7 @@ class MessageViewFragment :
             this@MessageViewFragment.message = message
 
             displayHeaderForLoadingMessage(message)
+            updateLinusMessageHeader(message.subject)
             messageTopView.setToLoadingState()
             showProgressThreshold = null
 

@@ -3,4 +3,5 @@
     <bool name="linus_mail_navigation_enabled">false</bool>
     <bool name="linus_mail_inbox_enabled">false</bool>
     <bool name="linus_mail_ai_settings_enabled">false</bool>
+    <bool name="linus_mail_reader_header_enabled">false</bool>
 </resources>

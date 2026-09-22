@@ -47,6 +47,7 @@ class LinusMailNavigationHost(
 ) {
     private var destination by mutableStateOf(LinusMailDestination.Mail)
     private lateinit var placeholderView: ComposeView
+    private lateinit var navigationView: ComposeView
 
     fun install() {
         placeholderView = ComposeView(context).apply {
@@ -66,7 +67,7 @@ class LinusMailNavigationHost(
             ),
         )
 
-        val navigationView = ComposeView(context).apply {
+        navigationView = ComposeView(context).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 LinusMailTheme {
@@ -85,6 +86,12 @@ class LinusMailNavigationHost(
                 android.view.Gravity.BOTTOM,
             ),
         )
+    }
+
+    fun setReaderVisible(readerVisible: Boolean) {
+        if (::navigationView.isInitialized) {
+            navigationView.isVisible = !readerVisible
+        }
     }
 
     fun showMail(): Boolean {

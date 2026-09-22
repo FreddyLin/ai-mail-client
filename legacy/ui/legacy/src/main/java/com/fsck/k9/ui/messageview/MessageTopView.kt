@@ -68,6 +68,7 @@ class MessageTopView(
     var renderPlainFormat = false
 
     private var showAccountIndicator = false
+    private var useLinusMessageHeader = false
 
     private var messageCryptoPresenter: MessageCryptoPresenter? = null
 
@@ -101,6 +102,13 @@ class MessageTopView(
 
     fun setShowAccountIndicator(showAccountIndicator: Boolean) {
         this.showAccountIndicator = showAccountIndicator
+    }
+
+    fun setUseLinusMessageHeader(useLinusMessageHeader: Boolean) {
+        this.useLinusMessageHeader = useLinusMessageHeader
+        if (useLinusMessageHeader) {
+            messageHeaderView.visibility = GONE
+        }
     }
 
     private fun setShowPicturesButtonListener() {
@@ -261,7 +269,7 @@ class MessageTopView(
 
     fun setHeaders(message: Message?, account: LegacyAccountDto?, showStar: Boolean) {
         messageHeaderView.populate(message, account, showStar, showAccountIndicator)
-        messageHeaderView.visibility = VISIBLE
+        messageHeaderView.visibility = if (useLinusMessageHeader) GONE else VISIBLE
     }
 
     fun setSubject(subject: String) {

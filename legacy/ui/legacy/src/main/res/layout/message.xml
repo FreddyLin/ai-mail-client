@@ -26,49 +26,68 @@ the 'message view theme' setting).
         <LinearLayout
             android:orientation="vertical"
             android:layout_width="fill_parent"
-            android:layout_height="fill_parent"
+            android:layout_height="wrap_content"
             >
 
             <!-- Header area -->
-            <include layout="@layout/message_view_header" />
-
-            <FrameLayout
-                android:id="@+id/extra_header_container"
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/linus_reader_shell_compose_view"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingVertical="4dp"
                 android:visibility="gone"
-                tools:visibility="visible"
-                >
+                />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/show_pictures"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center_horizontal"
-                    android:text="@string/message_view_show_remote_images_action"
-                    app:icon="@drawable/ic_image"
-                    />
-
-            </FrameLayout>
+            <include layout="@layout/message_view_header" />
 
             <Space
                 android:id="@+id/line_of_death"
                 android:layout_width="match_parent"
-                android:layout_height="8dp"
+                android:layout_height="4dp"
                 />
 
-            <androidx.compose.ui.platform.ComposeView
-                android:id="@+id/ai_summary_compose_view"
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/extra_header_container"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                />
+                android:visibility="gone"
+                tools:visibility="visible"
+                >
+
+                <FrameLayout
+                    android:id="@+id/extra_header_content"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="24dp"
+                    android:paddingVertical="2dp"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintWidth_max="720dp"
+                    >
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/show_pictures"
+                        style="?attr/materialButtonOutlinedStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minWidth="0dp"
+                        android:minHeight="32dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingHorizontal="8dp"
+                        android:text="@string/message_view_show_remote_images_action"
+                        app:icon="@drawable/ic_image"
+                        app:strokeWidth="0dp"
+                        />
+
+                </FrameLayout>
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
             <com.fsck.k9.view.ToolableViewAnimator
                 android:id="@+id/message_layout_animator"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
                 android:inAnimation="@anim/fade_in"
                 android:outAnimation="@anim/fade_out"
                 app:previewInitialChild="1"
@@ -81,7 +100,7 @@ the 'message view theme' setting).
 
                 <RelativeLayout
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:layout_height="wrap_content"
                     android:layout_margin="8dp"
                     >
 
